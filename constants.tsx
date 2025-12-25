@@ -10,7 +10,7 @@ import {
   Leaf, 
   Brain
 } from 'lucide-react';
-import { Category } from './types';
+import { Category } from './types.ts';
 
 export const CATEGORIES_CONFIG = [
   { name: Category.LogicMath, icon: <Binary className="w-5 h-5" />, color: 'text-blue-600' },

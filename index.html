@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -24,6 +23,9 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
     
+    <!-- Babel for browser-side TSX transpilation (Standard for "no-build" deployments) -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -68,17 +70,14 @@
     <div id="root"></div>
     
     <script>
-      // Process shim for browser environments to prevent crashes
-      window.process = {
-        env: {
-          NODE_ENV: 'production',
-          API_KEY: undefined // Will be used if available in the execution context
-        }
-      };
+      // Process shim for browser environments
+      window.process = window.process || {};
+      window.process.env = window.process.env || {};
+      window.process.env.NODE_ENV = window.process.env.NODE_ENV || 'production';
     </script>
 
-    <!-- Load the main application entry point -->
-    <script type="module" src="index.tsx"></script>
+    <!-- Load the main application entry point with Babel transpilation -->
+    <script type="text/babel" data-type="module" src="index.tsx"></script>
 
     <script>
       if ('serviceWorker' in navigator) {

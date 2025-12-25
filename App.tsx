@@ -15,11 +15,11 @@ import {
   Send,
   Loader2
 } from 'lucide-react';
-import { QuizPost, Category, ViewMode } from './types';
-import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
-import { CATEGORIES_CONFIG } from './constants';
-import ThemeWrapper from './components/ThemeWrapper';
-import PostModal from './components/PostModal';
+import { QuizPost, Category, ViewMode } from './types.ts';
+import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService.ts';
+import { CATEGORIES_CONFIG } from './constants.tsx';
+import ThemeWrapper from './components/ThemeWrapper.tsx';
+import PostModal from './components/PostModal.tsx';
 
 const App: React.FC = () => {
   const [posts, setPosts] = useState<QuizPost[]>([]);

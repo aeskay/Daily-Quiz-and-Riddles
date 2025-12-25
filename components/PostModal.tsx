@@ -1,8 +1,8 @@
 
 import React, { useState, useRef } from 'react';
 import { X, CheckCircle2, Info, Share2, Download, Image as ImageIcon, Loader2 } from 'lucide-react';
-import { QuizPost } from '../types';
-import { generatePostImage } from '../services/geminiService';
+import { QuizPost } from '../types.ts';
+import { generatePostImage } from '../services/geminiService.ts';
 import * as htmlToImage from 'html-to-image';
 
 interface PostModalProps {

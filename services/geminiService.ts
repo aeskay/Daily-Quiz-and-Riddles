@@ -1,12 +1,10 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { QuizPost, Category } from "../types";
-import { SYSTEM_INSTRUCTIONS } from "../constants";
-
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+import { QuizPost, Category } from "../types.ts";
+import { SYSTEM_INSTRUCTIONS } from "../constants.tsx";
 
 export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: prompt,
@@ -45,6 +43,7 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
 
 export async function generateCustomEnigma(userRequest: string): Promise<QuizPost> {
   try {
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: `Generate 1 viral enigma based on this request: "${userRequest}". 
