@@ -1,0 +1,18 @@
+[build]
+  command = "echo 'No build step required'"
+  publish = "."
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "*.ts"
+  [headers.values]
+    Content-Type = "application/javascript"
+
+[[headers]]
+  for = "*.tsx"
+  [headers.values]
+    Content-Type = "application/javascript"
