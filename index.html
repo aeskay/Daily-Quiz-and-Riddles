@@ -66,6 +66,20 @@
 </head>
 <body>
     <div id="root"></div>
+    
+    <script>
+      // Process shim for browser environments to prevent crashes
+      window.process = {
+        env: {
+          NODE_ENV: 'production',
+          API_KEY: undefined // Will be used if available in the execution context
+        }
+      };
+    </script>
+
+    <!-- Load the main application entry point -->
+    <script type="module" src="index.tsx"></script>
+
     <script>
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
