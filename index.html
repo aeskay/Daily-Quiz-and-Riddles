@@ -5,13 +5,25 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DQ&R - Daily Quiz and Riddles</title>
+    
+    <!-- PWA & Theme -->
     <meta name="theme-color" content="#0477CF">
     <link rel="manifest" href="manifest.json">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="DQ&R">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3407/3407024.png">
+
+    <!-- SEO & Social Sharing -->
+    <meta name="description" content="Viral AI-powered quiz and riddle generator for high engagement.">
+    <meta property="og:title" content="DQ&R - Daily Quiz and Riddles">
+    <meta property="og:description" content="The ultimate engine for viral social media puzzles.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary_large_image">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -24,11 +36,6 @@
         .font-mono-math {
             font-family: 'JetBrains Mono', monospace;
         }
-        .math-symbol {
-            color: #fbbf24;
-            font-weight: 800;
-        }
-        /* Custom scrollbar for a sleek dark look */
         ::-webkit-scrollbar {
           width: 8px;
         }
@@ -43,20 +50,32 @@
           background: #3f3f46;
         }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "html-to-image": "https://esm.sh/html-to-image@^1.11.11"
-  }
-}
-</script>
+
+    <script type="importmap">
+    {
+      "imports": {
+        "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+        "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "react/": "https://esm.sh/react@^19.2.3/",
+        "react": "https://esm.sh/react@^19.2.3",
+        "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+        "html-to-image": "https://esm.sh/html-to-image@^1.11.11"
+      }
+    }
+    </script>
 </head>
 <body>
     <div id="root"></div>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').then(reg => {
+            console.log('DQ&R Service Worker registered.');
+          }).catch(err => {
+            console.log('SW registration failed: ', err);
+          });
+        });
+      }
+    </script>
 </body>
 </html>
