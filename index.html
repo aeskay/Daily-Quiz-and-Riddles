@@ -55,20 +55,5 @@
 <body>
     <div id="root"></div>
     <script type="module" src="./index.tsx"></script>
-    <script>
-        if ('serviceWorker' in navigator) {
-            window.addEventListener('load', () => {
-                // Using a plain relative path is the most robust way to register 
-                // a Service Worker across different hosting and sandboxing environments.
-                navigator.serviceWorker.register('./sw.js')
-                    .then(function(reg) {
-                        console.log('Service Worker registered successfully. Scope:', reg.scope);
-                    })
-                    .catch(function(err) {
-                        console.error('Service Worker registration failed:', err);
-                    });
-            });
-        }
-    </script>
 </body>
 </html>

@@ -19,10 +19,13 @@ export interface QuizPost {
   category: string;
   style_hint: string;
   imageUrl?: string;
+  timestamp: number;
+  status: 'active' | 'archived';
 }
 
 export enum ViewMode {
   Today = 'TODAY',
   Browse = 'BROWSE',
-  Generate = 'GENERATE'
+  Generate = 'GENERATE',
+  Archive = 'ARCHIVE'
 }

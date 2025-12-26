@@ -41,11 +41,10 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
       
       if (isRateLimit || isServerErr) {
         const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
-        console.warn(`Retry ${i + 1}/${retries} after ${delay}ms due to:`, error.message);
         await sleep(delay);
         continue;
       }
-      throw error; // Don't retry for other errors (like safety or 400s)
+      throw error;
     }
   }
   throw lastError;
@@ -55,12 +54,12 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
   const fetchTask = async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview", // Upgraded for logic/math
+      model: "gemini-3-pro-preview",
       contents: prompt,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTIONS + "\nIMPORTANT: Return ONLY raw JSON. No markdown code blocks. No conversational text.",
+        systemInstruction: SYSTEM_INSTRUCTIONS + "\nIMPORTANT: Return ONLY raw JSON. No conversational text.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 2048 }, // Give the model space to solve the logic
+        thinkingConfig: { thinkingBudget: 2048 },
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -82,7 +81,8 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
     const parsed = JSON.parse(sanitizedText);
     return parsed.map((item: any, index: number) => ({
       ...item,
-      id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`
+      id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
+      timestamp: Date.now()
     }));
   };
 
@@ -114,7 +114,7 @@ export async function generateCustomEnigma(userRequest: string): Promise<QuizPos
     });
     
     const sanitizedText = sanitizeJsonResponse(response.text || "{}");
-    return { ...JSON.parse(sanitizedText), id: `custom-${Date.now()}` };
+    return { ...JSON.parse(sanitizedText), id: `custom-${Date.now()}`, timestamp: Date.now() };
   };
 
   return withRetry(generateTask);
@@ -134,12 +134,12 @@ export async function generatePostImage(post: QuizPost): Promise<string> {
 
 export const Prompts = {
   getToday: () => "Generate 5 random, viral, engagement-bait posts. Focus on Literal Math (BODMAS) and logic paradoxes.",
-  getCategory: (category: Category, isRefresh = false) => {
+  getCategory: (category: Category, isMore = false) => {
     const seed = Math.floor(Math.random() * 10000);
-    return `Generate ${isRefresh ? '8' : '10'} viral posts for the '${category}' category. ${isRefresh ? 'Ensure these are completely unique and unheard of.' : ''} [Seed: ${seed}]`;
+    return `Generate 8 viral posts for the '${category}' category. ${isMore ? 'Make them extremely unique and obscure.' : ''} [Seed: ${seed}]`;
   },
   refresh: () => {
     const seed = Math.floor(Math.random() * 10000);
-    return `Generate 5 new, completely unique viral challenges. Mix of Math, Logic, and Psychology paradoxes. Use fresh perspectives. [Seed: ${seed}]`;
+    return `Generate 8 new, completely unique viral challenges. Mix of Math, Logic, and Psychology paradoxes. [Seed: ${seed}]`;
   }
 };
