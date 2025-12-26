@@ -54,16 +54,30 @@
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <script type="module" src="./index.tsx"></script>
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // Using a plain relative path is more robust across different preview environments
-                // than trying to manually construct a URL object which might fail if window.location.href 
-                // is unusual or restricted.
-                navigator.serviceWorker.register('sw.js')
-                    .then(reg => console.log('SW Registered:', reg.scope))
-                    .catch(err => console.error('SW Registration failed:', err));
+                // To prevent origin mismatch errors in sandboxed environments, we explicitly
+                // construct the Service Worker URL using window.location.origin.
+                try {
+                  var origin = window.location.origin;
+                  var path = window.location.pathname;
+                  var dir = path.substring(0, path.lastIndexOf('/') + 1);
+                  var swUrl = origin + dir + 'sw.js';
+                  
+                  console.log('Registering Service Worker at:', swUrl);
+                  
+                  navigator.serviceWorker.register(swUrl, { scope: dir })
+                      .then(function(reg) {
+                          console.log('Service Worker registered successfully. Scope:', reg.scope);
+                      })
+                      .catch(function(err) {
+                          console.error('Service Worker registration failed:', err);
+                      });
+                } catch (e) {
+                  console.error('Error during Service Worker registration setup:', e);
+                }
             });
         }
     </script>

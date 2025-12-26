@@ -1,4 +1,4 @@
-const CACHE_NAME = 'dqr-cache-v6';
+const CACHE_NAME = 'dqr-cache-v9';
 const ASSETS = [
   './',
   './index.html',
@@ -45,8 +45,11 @@ self.addEventListener('fetch', (event) => {
       if (cachedResponse) return cachedResponse;
       
       return fetch(event.request).then((response) => {
-        // Only cache valid basic responses
-        if (!response || response.status !== 200 || response.type !== 'basic') {
+        // Only cache valid basic responses from the same origin or known CDNs
+        const isSameOrigin = url.origin === self.location.origin;
+        const isKnownCDN = url.origin.includes('cdn.tailwindcss.com') || url.origin.includes('fonts.googleapis.com');
+
+        if (!response || response.status !== 200 || (!isSameOrigin && !isKnownCDN)) {
           return response;
         }
 
@@ -57,7 +60,7 @@ self.addEventListener('fetch', (event) => {
 
         return response;
       }).catch(() => {
-        // Fallback to index if navigating and offline
+        // Fallback for navigation requests when offline
         if (event.request.mode === 'navigate') {
           return caches.match('./') || caches.match('./index.html');
         }
