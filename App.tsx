@@ -190,8 +190,8 @@ const App: React.FC = () => {
         <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-zinc-400 hover:text-white"><Menu /></button>
       </div>
 
-      <aside className={`fixed inset-0 z-50 md:relative md:flex md:w-80 flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
-        <div className="md:hidden flex items-center justify-between p-6 border-b border-zinc-900">
+      <aside className={`fixed inset-0 z-50 h-screen md:h-auto overflow-hidden md:relative md:flex md:w-80 flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+        <div className="flex items-center justify-between p-6 border-b border-zinc-900 shrink-0 md:hidden">
            <div className="flex items-center gap-2">
             <div className="px-2 py-1 bg-[#0477CF] text-white rounded font-black text-xs">DQ&R</div>
             <span className="text-white font-bold tracking-widest text-[10px]">MENU</span>
@@ -199,12 +199,12 @@ const App: React.FC = () => {
           <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-zinc-500 hover:text-white"><X size={24} /></button>
         </div>
 
-        <div className="hidden md:flex items-center gap-3 p-8 border-b border-zinc-900">
+        <div className="hidden md:flex items-center gap-3 p-8 border-b border-zinc-900 shrink-0">
           <div className="px-3 py-1 bg-[#0477CF] text-white rounded-lg font-black text-xl tracking-tighter">DQ&R</div>
           <h1 className="text-xl font-black font-heading tracking-tight leading-tight text-white">Daily Quiz <br/><span className="text-zinc-500 font-light">& Riddles</span></h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain pb-20">
           <div className="space-y-1">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
             <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -227,7 +227,7 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-8 border-t border-zinc-900 space-y-1">
+          <div className="pt-8 border-t border-zinc-900 space-y-1 pb-10">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Database size={12} /> DATABASE</h2>
             <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup JSON</button>
             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
@@ -235,8 +235,8 @@ const App: React.FC = () => {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden">
-        <header className="flex items-center justify-between p-6 md:p-10 bg-[#050505]/80 backdrop-blur-xl border-b border-zinc-900/50">
+      <main className="flex-1 flex flex-col min-h-screen">
+        <header className="flex items-center justify-between p-6 md:p-10 bg-[#050505]/80 backdrop-blur-xl border-b border-zinc-900/50 sticky top-0 z-30">
           <div>
             <h2 className="text-3xl md:text-4xl font-black font-heading tracking-tight text-white uppercase">
               {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Viral Feed"))}
@@ -253,7 +253,7 @@ const App: React.FC = () => {
           )}
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-zinc-950 relative">
+        <div className="flex-1 p-6 md:p-12 bg-zinc-950">
           <div className="max-w-7xl mx-auto">
             {/* Notification Area */}
             {error && <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center gap-4 text-red-400 mb-8 animate-in slide-in-from-top"><AlertCircle size={24} /><p className="font-medium">{error}</p></div>}
@@ -272,12 +272,17 @@ const App: React.FC = () => {
                 </form>
               </div>
             ) : (
-              <>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-24 pb-48">
+              <div className="pb-40">
+                {/* 
+                  Enhanced Grid Layout: 
+                  - Increased gap-y-40 for major vertical breathing room between rows
+                  - Explicit gap-x-12 for horizontal spacing 
+                */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-40">
                   {filteredPosts.map((post) => {
                     const [question, hook] = post.visual_text.split('|').map(s => s.trim());
                     return (
-                      <div key={post.id} className="group relative mb-8">
+                      <div key={post.id} className="group relative">
                         <ThemeWrapper styleHint={post.style_hint} onClick={() => setSelectedPost(post)}>
                           <div className="h-full flex flex-col justify-between min-h-[18rem]">
                             <div>
@@ -309,14 +314,14 @@ const App: React.FC = () => {
                 </div>
 
                 {filteredPosts.length === 0 && !loading && (
-                   <div className="text-center py-32 bg-zinc-900/20 rounded-[3rem] border border-zinc-800 border-dashed">
+                   <div className="text-center py-32 bg-zinc-900/20 rounded-[3rem] border border-zinc-800 border-dashed mt-10">
                       <Database className="mx-auto text-zinc-800 mb-6" size={64} />
                       <h3 className="text-2xl font-bold text-zinc-500">Database Empty</h3>
                       <p className="text-zinc-600 mt-2 mb-8">No enigmas found in this section.</p>
                       <button onClick={handleLoadMore} className="bg-zinc-800 hover:bg-zinc-700 px-8 py-4 rounded-2xl text-white font-bold transition-all active:scale-95">Fetch Initial Content</button>
                    </div>
                 )}
-              </>
+              </div>
             )}
           </div>
         </div>
