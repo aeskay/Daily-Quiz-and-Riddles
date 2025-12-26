@@ -27,8 +27,6 @@ const App: React.FC = () => {
     setError(null);
     try {
       let prompt = '';
-      
-      // Context-aware prompt selection
       if (category) {
         prompt = Prompts.getCategory(category, isRefresh);
       } else if (mode === ViewMode.Today) {
@@ -39,9 +37,15 @@ const App: React.FC = () => {
 
       const newPosts = await fetchQuizPosts(prompt);
       setPosts(newPosts);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Engine failure:", err);
-      setError('Failed to ignite the engine. The AI might be busy or the connection was interrupted.');
+      if (err?.message?.includes('429') || err?.status === 429) {
+        setError('Rate limit exceeded. Please wait 60 seconds and try again.');
+      } else if (err?.message?.includes('safety')) {
+        setError('The AI blocked this request for safety reasons. Try a different topic.');
+      } else {
+        setError('Failed to ignite the engine. The AI might be busy or the connection was interrupted.');
+      }
     } finally {
       setLoading(false);
     }
@@ -73,8 +77,12 @@ const App: React.FC = () => {
       setPosts([post, ...posts]);
       setSelectedPost(post);
       setCustomPrompt('');
-    } catch (err) {
-      setError('Custom generation failed. Try a different description.');
+    } catch (err: any) {
+       if (err?.message?.includes('429')) {
+        setError('Rate limit exceeded. Please wait a moment.');
+      } else {
+        setError('Custom generation failed. Try a different description.');
+      }
     } finally {
       setIsGeneratingCustom(false);
     }
@@ -136,7 +144,7 @@ const App: React.FC = () => {
 
         <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-zinc-950">
           <div className="max-w-7xl mx-auto">
-            {error && <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center gap-4 text-red-400 mb-8"><AlertCircle size={24} /><p className="font-medium">{error}</p></div>}
+            {error && <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center gap-4 text-red-400 mb-8 animate-in fade-in slide-in-from-top-4"><AlertCircle size={24} /><p className="font-medium">{error}</p></div>}
             
             {viewMode === ViewMode.Generate ? (
               <div className="max-w-2xl mx-auto space-y-12 py-10">
