@@ -4,97 +4,44 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>DQ&R - Daily Quiz and Riddles</title>
-    
-    <!-- PWA & Theme -->
-    <meta name="theme-color" content="#0477CF">
-    <link rel="manifest" href="manifest.json">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="DQ&R">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3407/3407024.png">
-
-    <!-- SEO & Social Sharing -->
-    <meta name="description" content="Viral AI-powered quiz and riddle generator for high engagement.">
-    <meta property="og:title" content="DQ&R - Daily Quiz and Riddles">
-    <meta property="og:description" content="The ultimate engine for viral social media puzzles.">
-    <meta property="og:type" content="website">
-    <meta name="twitter:card" content="summary_large_image">
-
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
-    
-    <!-- Babel for browser-side TSX transpilation -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Space+Grotesk:wght@700&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #09090b;
-            color: #fafafa;
-            margin: 0;
-        }
-        .font-heading {
-            font-family: 'Space Grotesk', sans-serif;
-        }
-        .font-mono-math {
-            font-family: 'JetBrains Mono', monospace;
-        }
-        ::-webkit-scrollbar {
-          width: 8px;
-        }
-        ::-webkit-scrollbar-track {
-          background: #09090b;
-        }
-        ::-webkit-scrollbar-thumb {
-          background: #27272a;
-          border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-          background: #3f3f46;
-        }
-        #root {
-          min-height: 100vh;
-        }
+        body { background-color: #050505; color: #fafafa; font-family: 'Inter', sans-serif; margin: 0; }
+        .font-heading { font-family: 'Space Grotesk', sans-serif; }
+        .font-mono-math { font-family: 'JetBrains Mono', monospace; }
+        #root { min-height: 100vh; }
+        /* Smooth scroll for the feed */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #050505; }
+        ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
     </style>
-
-    <script type="importmap">
+<script type="importmap">
 {
   "imports": {
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react-dom": "https://esm.sh/react-dom@^19.2.3",
-    "react-dom/client": "https://esm.sh/react-dom@^19.2.3/client",
+    "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.475.0",
-    "html-to-image": "https://esm.sh/html-to-image@^1.11.11",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "react/": "https://esm.sh/react@^19.2.3/"
+    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "html-to-image": "https://esm.sh/html-to-image@^1.11.13"
   }
 }
 </script>
 </head>
 <body>
     <div id="root"></div>
-    
     <script>
-      window.process = {
-        env: {
-          NODE_ENV: 'production',
-          API_KEY: '' // This will be injected by the platform
-        }
-      };
+        // Critical: Provide the process polyfill for the Gemini SDK
+        window.process = {
+            env: {
+                NODE_ENV: 'production',
+                API_KEY: '' // This will be injected by the environment
+            }
+        };
     </script>
-
-    <!-- Load the main application entry point with Babel transpilation and correct presets -->
+    <!-- Load the consolidated app with Babel -->
     <script type="text/babel" data-type="module" data-presets="react,typescript" src="index.tsx"></script>
-
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/sw.js').catch(err => {
-            console.log('SW registration failed: ', err);
-          });
-        });
-      }
-    </script>
 </body>
 </html>
