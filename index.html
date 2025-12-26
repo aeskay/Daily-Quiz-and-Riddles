@@ -58,26 +58,15 @@
     <script>
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                // To prevent origin mismatch errors in sandboxed environments, we explicitly
-                // construct the Service Worker URL using window.location.origin.
-                try {
-                  var origin = window.location.origin;
-                  var path = window.location.pathname;
-                  var dir = path.substring(0, path.lastIndexOf('/') + 1);
-                  var swUrl = origin + dir + 'sw.js';
-                  
-                  console.log('Registering Service Worker at:', swUrl);
-                  
-                  navigator.serviceWorker.register(swUrl, { scope: dir })
-                      .then(function(reg) {
-                          console.log('Service Worker registered successfully. Scope:', reg.scope);
-                      })
-                      .catch(function(err) {
-                          console.error('Service Worker registration failed:', err);
-                      });
-                } catch (e) {
-                  console.error('Error during Service Worker registration setup:', e);
-                }
+                // Using a plain relative path is the most robust way to register 
+                // a Service Worker across different hosting and sandboxing environments.
+                navigator.serviceWorker.register('./sw.js')
+                    .then(function(reg) {
+                        console.log('Service Worker registered successfully. Scope:', reg.scope);
+                    })
+                    .catch(function(err) {
+                        console.error('Service Worker registration failed:', err);
+                    });
             });
         }
     </script>

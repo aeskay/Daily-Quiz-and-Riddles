@@ -27,12 +27,12 @@ const App: React.FC = () => {
     setError(null);
     try {
       let prompt = '';
-      if (isRefresh) {
-        prompt = Prompts.refresh();
+      
+      // Context-aware prompt selection
+      if (category) {
+        prompt = Prompts.getCategory(category, isRefresh);
       } else if (mode === ViewMode.Today) {
-        prompt = Prompts.getToday();
-      } else if (category) {
-        prompt = Prompts.getCategory(category);
+        prompt = isRefresh ? Prompts.refresh() : Prompts.getToday();
       } else {
         prompt = Prompts.getToday();
       }
@@ -40,7 +40,8 @@ const App: React.FC = () => {
       const newPosts = await fetchQuizPosts(prompt);
       setPosts(newPosts);
     } catch (err) {
-      setError('Failed to ignite the engine. Please check your connection and try again.');
+      console.error("Engine failure:", err);
+      setError('Failed to ignite the engine. The AI might be busy or the connection was interrupted.');
     } finally {
       setLoading(false);
     }
@@ -73,14 +74,14 @@ const App: React.FC = () => {
       setSelectedPost(post);
       setCustomPrompt('');
     } catch (err) {
-      setError('Custom generation failed. Try a different prompt.');
+      setError('Custom generation failed. Try a different description.');
     } finally {
       setIsGeneratingCustom(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-[#050505] overflow-x-hidden">
+    <div className="min-h-screen flex flex-col md:flex-row bg-[#050505] overflow-x-hidden font-sans">
       {/* Mobile Header */}
       <div className="md:hidden flex items-center justify-between p-4 border-b border-zinc-800 sticky top-0 bg-[#09090b] z-40">
         <div className="flex items-center gap-2">
@@ -94,7 +95,7 @@ const App: React.FC = () => {
         <div className="md:hidden flex items-center justify-between p-6 border-b border-zinc-900">
            <div className="flex items-center gap-2">
             <div className="px-2 py-1 bg-[#0477CF] text-white rounded font-black text-xs tracking-tighter">DQ&R</div>
-            <span className="text-white font-bold">Menu</span>
+            <span className="text-white font-bold uppercase tracking-widest text-[10px]">MENU</span>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-zinc-500 hover:text-white transition-colors"><X size={24} /></button>
         </div>
@@ -129,13 +130,14 @@ const App: React.FC = () => {
             <p className="text-zinc-500 text-sm mt-1">{viewMode === ViewMode.Generate ? "Design your own viral engagement hooks" : "Optimized for high social engagement"}</p>
           </div>
           {viewMode !== ViewMode.Generate && (
-            <button onClick={handleRefresh} disabled={loading} className="p-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl border border-zinc-800 transition-all active:scale-95 disabled:opacity-50 shadow-xl"><RefreshCw size={24} className={loading ? 'animate-spin' : ''} /></button>
+            <button onClick={handleRefresh} disabled={loading} className="p-4 bg-zinc-900 hover:bg-zinc-800 text-white rounded-2xl border border-zinc-800 transition-all active:scale-95 disabled:opacity-50 shadow-xl group"><RefreshCw size={24} className={`${loading ? 'animate-spin' : 'group-hover:rotate-180'} transition-transform duration-500`} /></button>
           )}
         </header>
 
         <div className="flex-1 overflow-y-auto p-6 md:p-12 bg-zinc-950">
           <div className="max-w-7xl mx-auto">
             {error && <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center gap-4 text-red-400 mb-8"><AlertCircle size={24} /><p className="font-medium">{error}</p></div>}
+            
             {viewMode === ViewMode.Generate ? (
               <div className="max-w-2xl mx-auto space-y-12 py-10">
                 <div className="text-center space-y-4">
@@ -145,7 +147,7 @@ const App: React.FC = () => {
                 </div>
                 <form onSubmit={handleCustomGenerate} className="space-y-4">
                    <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A tricky BODMAS problem involving negative numbers..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white placeholder-zinc-700 focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-lg" />
-                   <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-5 rounded-3xl flex items-center justify-center gap-3 shadow-xl">{isGeneratingCustom ? <><Loader2 className="animate-spin" size={24} /><span>IGNITING...</span></> : <><Send size={24} /><span>GENERATE</span></>}</button>
+                   <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-5 rounded-3xl flex items-center justify-center gap-3 shadow-xl transition-all active:scale-95">{isGeneratingCustom ? <><Loader2 className="animate-spin" size={24} /><span>IGNITING...</span></> : <><Send size={24} /><span>GENERATE</span></>}</button>
                 </form>
               </div>
             ) : (
