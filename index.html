@@ -2,12 +2,27 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>DQ&R - Daily Quiz and Riddles</title>
+    
+    <!-- PWA & Mobile Meta Tags -->
+    <meta name="theme-color" content="#0477CF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="DQ&R">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3407/3407024.png">
+    <link rel="manifest" href="manifest.json">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=Space+Grotesk:wght@700&family=JetBrains+Mono&display=swap" rel="stylesheet">
     <style>
-        body { background-color: #050505; color: #fafafa; font-family: 'Inter', sans-serif; margin: 0; }
+        body { 
+            background-color: #050505; 
+            color: #fafafa; 
+            font-family: 'Inter', sans-serif; 
+            margin: 0;
+            -webkit-tap-highlight-color: transparent;
+        }
         .font-heading { font-family: 'Space Grotesk', sans-serif; }
         .font-mono-math { font-family: 'JetBrains Mono', monospace; }
         #root { min-height: 100vh; }
@@ -15,6 +30,12 @@
         ::-webkit-scrollbar-track { background: #050505; }
         ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 10px; }
         ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+        
+        /* Safe area spacing for modern phones */
+        @supports (padding: env(safe-area-inset-top)) {
+            .safe-pt { padding-top: env(safe-area-inset-top); }
+            .safe-pb { padding-bottom: env(safe-area-inset-bottom); }
+        }
     </style>
 <script type="importmap">
 {
@@ -34,5 +55,17 @@
 <body>
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                // Using a plain relative path is more robust across different preview environments
+                // than trying to manually construct a URL object which might fail if window.location.href 
+                // is unusual or restricted.
+                navigator.serviceWorker.register('sw.js')
+                    .then(reg => console.log('SW Registered:', reg.scope))
+                    .catch(err => console.error('SW Registration failed:', err));
+            });
+        }
+    </script>
 </body>
 </html>
