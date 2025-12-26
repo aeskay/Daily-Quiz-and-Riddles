@@ -190,7 +190,9 @@ const App: React.FC = () => {
         <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-zinc-400 hover:text-white"><Menu /></button>
       </div>
 
-      <aside className={`fixed inset-0 z-50 h-screen md:h-auto overflow-hidden md:relative md:flex md:w-80 flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}>
+      <aside 
+        className={`fixed top-0 left-0 bottom-0 z-50 w-full md:w-80 h-[100dvh] md:h-auto md:relative md:translate-x-0 flex flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+      >
         <div className="flex items-center justify-between p-6 border-b border-zinc-900 shrink-0 md:hidden">
            <div className="flex items-center gap-2">
             <div className="px-2 py-1 bg-[#0477CF] text-white rounded font-black text-xs">DQ&R</div>
@@ -204,7 +206,11 @@ const App: React.FC = () => {
           <h1 className="text-xl font-black font-heading tracking-tight leading-tight text-white">Daily Quiz <br/><span className="text-zinc-500 font-light">& Riddles</span></h1>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain pb-20">
+        {/* 
+          SCROLLING MENU CONTAINER
+          Using massive pb-60 to ensure content is never cut off by dynamic mobile UI.
+        */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain pb-60 scroll-smooth">
           <div className="space-y-1">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
             <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -227,11 +233,14 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-8 border-t border-zinc-900 space-y-1 pb-10">
+          <div className="pt-8 border-t border-zinc-900 space-y-1">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Database size={12} /> DATABASE</h2>
             <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup JSON</button>
             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
           </div>
+          
+          {/* Extra bottom spacer for mobile safari address bar issues */}
+          <div className="h-20" />
         </div>
       </aside>
 
@@ -272,13 +281,13 @@ const App: React.FC = () => {
                 </form>
               </div>
             ) : (
-              <div className="pb-40">
+              <div className="pb-60">
                 {/* 
                   Enhanced Grid Layout: 
-                  - Increased gap-y-40 for major vertical breathing room between rows
-                  - Explicit gap-x-12 for horizontal spacing 
+                  - Increased gap-y-52 (13rem) for massive vertical separation.
+                  - Explicit gap-x-12 for horizontal spacing.
                 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-40">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-52">
                   {filteredPosts.map((post) => {
                     const [question, hook] = post.visual_text.split('|').map(s => s.trim());
                     return (
