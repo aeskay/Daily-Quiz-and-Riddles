@@ -191,7 +191,7 @@ const App: React.FC = () => {
       </div>
 
       <aside 
-        className={`fixed top-0 left-0 bottom-0 z-50 w-full md:w-80 h-[100dvh] md:h-auto md:relative md:translate-x-0 flex flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}
+        className={`fixed top-0 left-0 bottom-0 z-50 w-full md:w-80 h-screen md:h-auto md:relative flex flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
         <div className="flex items-center justify-between p-6 border-b border-zinc-900 shrink-0 md:hidden">
            <div className="flex items-center gap-2">
@@ -208,9 +208,10 @@ const App: React.FC = () => {
 
         {/* 
           SCROLLING MENU CONTAINER
-          Using massive pb-60 to ensure content is never cut off by dynamic mobile UI.
+          Enhanced scrolling with overscroll-contain and significant padding-bottom 
+          to ensure the last items are always reachable even with mobile browser UI.
         */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain pb-60 scroll-smooth">
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain scroll-smooth">
           <div className="space-y-1">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
             <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
@@ -239,8 +240,11 @@ const App: React.FC = () => {
             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
           </div>
           
-          {/* Extra bottom spacer for mobile safari address bar issues */}
-          <div className="h-20" />
+          {/* 
+            Extra padding at the bottom of the sidebar to ensure Backup/Restore 
+            options are not hidden by mobile browser UI.
+          */}
+          <div className="h-40 md:h-20" aria-hidden="true" />
         </div>
       </aside>
 
@@ -281,13 +285,12 @@ const App: React.FC = () => {
                 </form>
               </div>
             ) : (
-              <div className="pb-60">
+              <div className="pb-40">
                 {/* 
-                  Enhanced Grid Layout: 
-                  - Increased gap-y-52 (13rem) for massive vertical separation.
-                  - Explicit gap-x-12 for horizontal spacing.
+                  Updated Grid Layout: 
+                  - Using requested gap-y-20 and gap-x-12.
                 */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-52">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-20">
                   {filteredPosts.map((post) => {
                     const [question, hook] = post.visual_text.split('|').map(s => s.trim());
                     return (
