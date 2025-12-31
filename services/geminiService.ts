@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type } from "@google/genai";
 import { QuizPost, Category } from "../types";
 import { SYSTEM_INSTRUCTIONS } from "../constants";
@@ -40,7 +41,8 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 3): Promise<T> {
       const isServerErr = error?.message?.includes('500') || error?.status === 500;
       
       if (isRateLimit || isServerErr) {
-        const delay = Math.pow(2, i) * 1000 + Math.random() * 1000;
+        // Increase delay for hosted environments to respect free tier quotas
+        const delay = Math.pow(2, i) * 2000 + Math.random() * 1000;
         await sleep(delay);
         continue;
       }
@@ -54,12 +56,12 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
   const fetchTask = async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS + "\nIMPORTANT: Return ONLY raw JSON. No conversational text.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 2048 },
+        thinkingConfig: { thinkingBudget: 0 }, // Flash-lite doesn't need high thinking budget for this
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -93,12 +95,12 @@ export async function generateCustomEnigma(userRequest: string): Promise<QuizPos
   const generateTask = async () => {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
-      model: "gemini-3-pro-preview",
+      model: "gemini-3-flash-preview",
       contents: `Generate 1 viral enigma based on this request: "${userRequest}".`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS,
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 1024 },
+        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.OBJECT,
           properties: {
