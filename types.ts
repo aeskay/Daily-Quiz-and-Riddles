@@ -4,10 +4,10 @@ export enum Category {
   ScienceTech = 'Science & Tech',
   GeneralKnowledge = 'General Knowledge',
   LanguageLit = 'Language & Literature',
-  PopCulture = 'Pop Culture',
-  TheArts = 'The Arts',
+  Riddles = 'Riddles',
   NatureAnimals = 'Nature & Animals',
   Psychology = 'Psychology',
+  WouldYouRather = 'Would you rather',
   All = 'All'
 }
 

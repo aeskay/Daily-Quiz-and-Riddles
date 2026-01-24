@@ -61,7 +61,7 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS + "\nIMPORTANT: Return ONLY raw JSON. No conversational text.",
         responseMimeType: "application/json",
-        thinkingConfig: { thinkingBudget: 0 }, // Flash-lite doesn't need high thinking budget for this
+        thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
           type: Type.ARRAY,
           items: {
@@ -135,13 +135,13 @@ export async function generatePostImage(post: QuizPost): Promise<string> {
 }
 
 export const Prompts = {
-  getToday: () => "Generate 5 random, viral, engagement-bait posts. Focus on Literal Math (BODMAS) and logic paradoxes.",
+  getToday: () => "Generate 5 random, viral, engagement-bait posts. Mix of 'Logic & Math', 'Riddles', and 'Would you rather'.",
   getCategory: (category: Category, isMore = false) => {
     const seed = Math.floor(Math.random() * 10000);
     return `Generate 8 viral posts for the '${category}' category. ${isMore ? 'Make them extremely unique and obscure.' : ''} [Seed: ${seed}]`;
   },
   refresh: () => {
     const seed = Math.floor(Math.random() * 10000);
-    return `Generate 8 new, completely unique viral challenges. Mix of Math, Logic, and Psychology paradoxes. [Seed: ${seed}]`;
+    return `Generate 8 new, completely unique viral challenges. Mix of Math, Logic, Riddles, and Would you rather dilemmas. [Seed: ${seed}]`;
   }
 };
