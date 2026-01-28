@@ -59,7 +59,7 @@ export async function fetchQuizPosts(prompt: string): Promise<QuizPost[]> {
       model: "gemini-3-flash-preview",
       contents: prompt,
       config: {
-        systemInstruction: SYSTEM_INSTRUCTIONS + "\nIMPORTANT: Return ONLY raw JSON. No conversational text.",
+        systemInstruction: SYSTEM_INSTRUCTIONS + "\nCRITICAL: Avoid common internet riddles. Think outside the box.",
         responseMimeType: "application/json",
         thinkingConfig: { thinkingBudget: 0 },
         responseSchema: {
@@ -96,7 +96,7 @@ export async function generateCustomEnigma(userRequest: string): Promise<QuizPos
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
       model: "gemini-3-flash-preview",
-      contents: `Generate 1 viral enigma based on this request: "${userRequest}".`,
+      contents: `Generate 1 viral enigma based on this request: "${userRequest}". Ensure it is unique and obscure.`,
       config: {
         systemInstruction: SYSTEM_INSTRUCTIONS,
         responseMimeType: "application/json",
@@ -135,13 +135,24 @@ export async function generatePostImage(post: QuizPost): Promise<string> {
 }
 
 export const Prompts = {
-  getToday: () => "Generate 5 random, viral, engagement-bait posts. Mix of 'Logic & Math', 'Riddles', and 'Would you rather'.",
+  getToday: () => {
+    const entropy = Math.random().toString(36).substring(7);
+    return `Generate 5 random, viral, engagement-bait posts. Entropy: ${entropy}. Focus on 'Obscure logic puzzles' and 'Dilemmas'. NO common riddles.`;
+  },
   getCategory: (category: Category, isMore = false) => {
-    const seed = Math.floor(Math.random() * 10000);
-    return `Generate 8 viral posts for the '${category}' category. ${isMore ? 'Make them extremely unique and obscure.' : ''} [Seed: ${seed}]`;
+    const seed = Math.floor(Math.random() * 1000000);
+    const varietyKeywords = ['obscure', 'advanced', 'rare', 'lateral-thinking', 'deceptive', 'mind-bending'];
+    const selectedKeyword = varietyKeywords[seed % varietyKeywords.length];
+    return `Generate 8 viral posts for the '${category}' category. 
+      Focus on ${selectedKeyword} logic. ${isMore ? 'DO NOT repeat standard internet content. Seek the most obscure variations.' : ''} 
+      [Unique Seed: ${seed}]`;
   },
   refresh: () => {
-    const seed = Math.floor(Math.random() * 10000);
-    return `Generate 8 new, completely unique viral challenges. Mix of Math, Logic, Riddles, and Would you rather dilemmas. [Seed: ${seed}]`;
+    const seed = Math.floor(Math.random() * 1000000);
+    const entropy = Date.now();
+    return `Generate 8 new, completely unique viral challenges. 
+      Mix of Math, Logic, Riddles, and Would you rather dilemmas. 
+      STRICTLY FORBIDDEN: Standard school-level riddles. Use adult-level lateral thinking.
+      [Entropy: ${entropy}-${seed}]`;
   }
 };
