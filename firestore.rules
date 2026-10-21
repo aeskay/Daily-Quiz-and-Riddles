@@ -20,6 +20,25 @@ rules_version = '2';
 //   - status: string (required, allowed: 'active', 'archived') - Post visibility/status
 //   - userId: string (required, matches request.auth.uid and path {userId}, immutable) - Creator's UID
 //   - imageUrl: string (optional, max 2048 chars) - Cached illustration URL
+//   - renderedImageUrl: string (optional, max 2048 chars) - Public Firebase Storage URL for rendered card image
+//   - scheduleStatus: string (optional, allowed: 'draft', 'queued', 'posted', 'failed') - Autopost status
+//   - scheduledTime: string (optional, max 100 chars) - Scheduled time string (e.g. '09:00' or ISO)
+//   - postedAt: number (optional, timestamp in ms) - Publication timestamp
+//   - postedPlatforms: list (optional, list of strings, max 20 items) - Dispatched platforms
+//   - postError: string (optional, max 2000 chars) - Error message if publication failed
+//
+// ---------------------------------------------------------------
+//
+// Collection: /users/{userId}/settings/{settingId}
+// Document ID: {settingId} (required, non-empty string, max 64 chars, e.g. 'social')
+//
+// Fields (for 'social' setting):
+//   - twitter: map (optional) - Twitter/X API credentials and toggles
+//   - meta: map (optional) - Facebook/Instagram credentials and toggles
+//   - tiktok: map (optional) - TikTok credentials and toggles
+//   - scheduleTimes: list of strings (optional, max 20 items) - Preferred daily posting slots
+//   - timezone: string (optional, max 100 chars) - User's local timezone
+//   - autopostEnabled: bool (optional) - Automated posting toggle
 //
 // ===============================================================
 
@@ -68,7 +87,9 @@ service cloud.firestore {
       let allowedFields = [
         'id', 'visual_text', 'read_more_content', 'answer',
         'category', 'style_hint', 'image_keyword', 'text_length',
-        'timestamp', 'status', 'userId', 'imageUrl'
+        'timestamp', 'status', 'userId', 'imageUrl',
+        'renderedImageUrl', 'scheduleStatus', 'scheduledTime',
+        'postedAt', 'postedPlatforms', 'postError'
       ];
 
       return hasRequiredFields(requiredFields) &&
@@ -113,7 +134,41 @@ service cloud.firestore {
         data.userId == request.auth.uid &&
         data.userId == userId &&
         // optional imageUrl validation
-        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2048));
+        (!('imageUrl' in data) || data.imageUrl == null || (data.imageUrl is string && data.imageUrl.size() <= 2048)) &&
+        // optional renderedImageUrl validation
+        (!('renderedImageUrl' in data) || data.renderedImageUrl == null || (data.renderedImageUrl is string && data.renderedImageUrl.size() <= 2048)) &&
+        // optional scheduleStatus validation
+        (!('scheduleStatus' in data) || data.scheduleStatus == null || (data.scheduleStatus is string && data.scheduleStatus in ['draft', 'queued', 'posted', 'failed'])) &&
+        // optional scheduledTime validation
+        (!('scheduledTime' in data) || data.scheduledTime == null || (data.scheduledTime is string && data.scheduledTime.size() <= 100)) &&
+        // optional postedAt validation
+        (!('postedAt' in data) || data.postedAt == null || (data.postedAt is number && data.postedAt > 0)) &&
+        // optional postedPlatforms validation
+        (!('postedPlatforms' in data) || data.postedPlatforms == null || (data.postedPlatforms is list && data.postedPlatforms.size() <= 20)) &&
+        // optional postError validation
+        (!('postError' in data) || data.postError == null || (data.postError is string && data.postError.size() <= 2000));
+    }
+
+    // ---------------------------------------------------------------
+    // Domain Validator: User Settings
+    // ---------------------------------------------------------------
+
+    function isValidSettingId(settingId) {
+      return settingId is string &&
+        settingId.size() > 0 &&
+        settingId.size() <= 64;
+    }
+
+    function isValidSetting(data, settingId) {
+      return isValidSettingId(settingId) &&
+        // Guard against resource exhaustion (max 50 top-level properties)
+        data.keys().size() <= 50 &&
+        (!('twitter' in data) || data.twitter is map) &&
+        (!('meta' in data) || data.meta is map) &&
+        (!('tiktok' in data) || data.tiktok is map) &&
+        (!('scheduleTimes' in data) || (data.scheduleTimes is list && data.scheduleTimes.size() <= 20)) &&
+        (!('timezone' in data) || (data.timezone is string && data.timezone.size() <= 100)) &&
+        (!('autopostEnabled' in data) || data.autopostEnabled is bool);
     }
 
     // ---------------------------------------------------------------
@@ -135,6 +190,27 @@ service cloud.firestore {
 
       // Authenticated owners can delete their own posts
       allow delete: if isOwner(userId);
+    }
+
+    // ---------------------------------------------------------------
+    // Subcollection: /users/{userId}/settings/{settingId}
+    // ---------------------------------------------------------------
+
+    match /users/{userId}/settings/{settingId} {
+      // Authenticated owners can read (get & list) their own settings
+      allow read: if isOwner(userId);
+
+      // Authenticated owners can create their own settings with valid schema
+      allow create: if isOwner(userId) &&
+        isValidSetting(request.resource.data, settingId);
+
+      // Authenticated owners can update their own settings with valid schema
+      allow update: if isOwner(userId) &&
+        isValidSetting(request.resource.data, settingId);
+
+      // Authenticated owners can delete their own settings
+      allow delete: if isOwner(userId) &&
+        isValidSettingId(settingId);
     }
 
     // ---------------------------------------------------------------

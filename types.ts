@@ -27,15 +27,50 @@ export interface QuizPost {
   text_length: 'short' | 'medium' | 'long';
   /** Cached image URL once fetched */
   imageUrl?: string;
+  /** Public Firebase Storage URL of the fully rendered 1000x1000 square card PNG */
+  renderedImageUrl?: string;
   timestamp: number;
   status: 'active' | 'archived';
   /** Firebase Auth User ID who created this post */
   userId?: string;
+
+  /** Autopost queue & publication state */
+  scheduleStatus?: 'draft' | 'queued' | 'posted' | 'failed';
+  scheduledTime?: string; // e.g. "09:00", "13:00", "18:00" or ISO string
+  postedAt?: number;
+  postedPlatforms?: string[];
+  postError?: string;
+}
+
+export interface SocialConfig {
+  twitter: {
+    apiKey: string;
+    apiSecret: string;
+    accessToken: string;
+    accessSecret: string;
+    enabled: boolean;
+  };
+  meta: {
+    pageId: string;
+    instagramAccountId: string;
+    accessToken: string; // Long-Lived Page Access Token
+    postToFacebook: boolean;
+    postToInstagram: boolean;
+  };
+  tiktok: {
+    accessToken: string;
+    openId: string;
+    enabled: boolean;
+  };
+  scheduleTimes: string[]; // e.g. ["09:00", "13:00", "18:00"]
+  timezone: string; // e.g. "America/Chicago"
+  autopostEnabled: boolean;
 }
 
 export enum ViewMode {
   Today = 'TODAY',
   Browse = 'BROWSE',
   Generate = 'GENERATE',
-  Archive = 'ARCHIVE'
+  Archive = 'ARCHIVE',
+  Queue = 'QUEUE'
 }

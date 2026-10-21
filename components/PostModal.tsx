@@ -2,17 +2,21 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, CheckCircle2, Info, Share2, Download, 
   Image as ImageIcon, Loader2, Upload, 
-  Search, Edit3, ChevronRight 
+  Search, Edit3, ChevronRight, Clock, Send, Check
 } from 'lucide-react';
 import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
+import { uploadRenderedCard } from '../services/storageService';
+import { queuePostForAutopost, triggerPostNow } from '../services/socialService';
 import * as htmlToImage from 'html-to-image';
 
 interface PostModalProps {
   post: QuizPost | null;
   onClose: () => void;
+  onPostUpdated?: (updated: QuizPost) => void;
 }
+
 
 type LayoutType = 'auto' | 'side' | 'center' | 'text-only' | 'wyr';
 
@@ -286,6 +290,73 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
     reader.readAsDataURL(file);
   };
 
+  const [isQueueing, setIsQueueing] = useState(false);
+  const [queueSuccess, setQueueSuccess] = useState(false);
+  const [isPostingNow, setIsPostingNow] = useState(false);
+  const [postNowStatus, setPostNowStatus] = useState<string | null>(null);
+
+  const generateCardDataUrl = async (): Promise<string> => {
+    if (!exportRef.current) throw new Error("No canvas element");
+    const el = exportRef.current;
+    const origTransform = el.style.transform;
+    try {
+      el.style.transform = 'none';
+      return await htmlToImage.toPng(el, {
+        quality: 1.0,
+        pixelRatio: 1.5,
+        backgroundColor: '#ffffff',
+      });
+    } finally {
+      el.style.transform = origTransform;
+    }
+  };
+
+  const handleQueueForAutopost = async () => {
+    if (!post?.userId) {
+      alert("Please sign in with Google to queue posts for autoposting.");
+      return;
+    }
+    setIsQueueing(true);
+    try {
+      const dataUrl = await generateCardDataUrl();
+      const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
+      const updated = await queuePostForAutopost(post.userId, post, storageUrl);
+      setQueueSuccess(true);
+      onPostUpdated?.(updated);
+      setTimeout(() => setQueueSuccess(false), 3000);
+    } catch (err: any) {
+      console.error("Queue error:", err);
+      alert("Failed to queue post: " + (err?.message || err));
+    } finally {
+      setIsQueueing(false);
+    }
+  };
+
+  const handlePostNow = async () => {
+    if (!post?.userId) {
+      alert("Please sign in to post.");
+      return;
+    }
+    setIsPostingNow(true);
+    setPostNowStatus("Rendering & uploading image...");
+    try {
+      const dataUrl = await generateCardDataUrl();
+      const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
+      await queuePostForAutopost(post.userId, post, storageUrl);
+      setPostNowStatus("Publishing to socials...");
+      const res = await triggerPostNow(post.id);
+      if (res.success) {
+        setPostNowStatus(`✅ Posted to: ${res.platforms.join(', ')}!`);
+      } else {
+        setPostNowStatus(`⚠️ Failed: ${res.errors.join(' | ')}`);
+      }
+    } catch (err: any) {
+      setPostNowStatus(`❌ Error: ${err?.message || err}`);
+    } finally {
+      setIsPostingNow(false);
+    }
+  };
+
   const handleDownload = async () => {
     if (!exportRef.current) return;
     const el = exportRef.current;
@@ -413,21 +484,53 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
           </div>
 
           {/* Bottom Action Bar */}
-          <div className="w-full flex items-center gap-3">
-            <button
-              onClick={handleDownload}
-              className="flex-1 bg-white hover:bg-zinc-100 text-black font-black py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm shadow-md"
-            >
-              <Download size={18} /> Download Post (1500px)
-            </button>
-            <button
-              onClick={handleShare}
-              disabled={isSharing}
-              className="p-3.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl transition-all active:scale-95 disabled:opacity-50 shadow-md"
-              title="Share"
-            >
-              {isSharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
-            </button>
+          <div className="w-full flex flex-col gap-3">
+            <div className="w-full flex items-center gap-3">
+              <button
+                onClick={handleDownload}
+                className="flex-1 bg-white hover:bg-zinc-100 text-black font-black py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm shadow-md"
+              >
+                <Download size={18} /> Download Post (1500px)
+              </button>
+              <button
+                onClick={handleShare}
+                disabled={isSharing}
+                className="p-3.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl transition-all active:scale-95 disabled:opacity-50 shadow-md"
+                title="Share"
+              >
+                {isSharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
+              </button>
+            </div>
+
+            {/* Social Autopost & Queue Buttons */}
+            {post.userId && (
+              <div className="w-full flex flex-col gap-2 pt-2 border-t border-zinc-900">
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleQueueForAutopost}
+                    disabled={isQueueing}
+                    className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition-all ${post.scheduleStatus === 'queued' || queueSuccess ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white'}`}
+                  >
+                    {isQueueing ? <Loader2 size={14} className="animate-spin" /> : (queueSuccess ? <Check size={14} /> : <Clock size={14} />)}
+                    {queueSuccess || post.scheduleStatus === 'queued' ? 'Queued for Autopost' : 'Queue for Autopost'}
+                  </button>
+                  <button
+                    onClick={handlePostNow}
+                    disabled={isPostingNow}
+                    className="py-3 px-4 bg-[#0477CF] hover:bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    title="Immediately post to your enabled socials"
+                  >
+                    {isPostingNow ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    Post Now
+                  </button>
+                </div>
+                {postNowStatus && (
+                  <div className="text-[11px] p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-300">
+                    {postNowStatus}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

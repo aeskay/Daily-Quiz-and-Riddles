@@ -1,0 +1,11 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /users/{userId}/posts/{allPaths=**} {
+      // Allow public read so Instagram, Facebook, and Twitter scrapers can fetch the card image
+      allow read: if true;
+      // Allow writes only from the authenticated owner
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}

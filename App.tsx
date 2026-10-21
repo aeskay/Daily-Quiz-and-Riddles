@@ -3,7 +3,8 @@ import {
   Flame, Menu, X, AlertCircle, TrendingUp, 
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
   Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
-  Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon
+  Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon,
+  Clock
 } from 'lucide-react';
 import { QuizPost, Category, ViewMode } from './types';
 import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
@@ -252,11 +253,13 @@ const App: React.FC = () => {
     let base = allPosts;
     if (viewMode === ViewMode.Archive) {
       base = allPosts.filter(p => p.status === 'archived');
+    } else if (viewMode === ViewMode.Queue) {
+      base = allPosts.filter(p => p.scheduleStatus === 'queued');
     } else {
       base = allPosts.filter(p => p.status === 'active');
     }
 
-    if (selectedCategory && viewMode !== ViewMode.Archive) {
+    if (selectedCategory && viewMode !== ViewMode.Archive && viewMode !== ViewMode.Queue) {
       return base.filter(p => p.category === selectedCategory);
     }
     return base.sort((a, b) => b.timestamp - a.timestamp);
@@ -264,8 +267,10 @@ const App: React.FC = () => {
 
   const stats = useMemo(() => ({
     active: allPosts.filter(p => p.status === 'active').length,
-    archived: allPosts.filter(p => p.status === 'archived').length
+    archived: allPosts.filter(p => p.status === 'archived').length,
+    queued: allPosts.filter(p => p.scheduleStatus === 'queued').length,
   }), [allPosts]);
+
 
   const handleCategorySelect = (category: Category) => {
     setSelectedCategory(category);
@@ -396,11 +401,16 @@ const App: React.FC = () => {
               <div className="flex items-center gap-3"><Flame size={20} /> Feed</div>
               <span className="text-[10px] font-bold opacity-50">{stats.active}</span>
             </button>
+            <button onClick={() => { setViewMode(ViewMode.Queue); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Queue ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              <div className="flex items-center gap-3"><Clock size={20} /> Autopost Queue</div>
+              <span className="text-[10px] font-bold opacity-50">{stats.queued}</span>
+            </button>
             <button onClick={() => { setViewMode(ViewMode.Archive); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Archive ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <div className="flex items-center gap-3"><Archive size={20} /> Archive</div>
               <span className="text-[10px] font-bold opacity-50">{stats.archived}</span>
             </button>
             <button onClick={() => { setViewMode(ViewMode.Generate); setIsSidebarOpen(false); }} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Generate ? 'bg-[#0477CF] text-white' : 'text-zinc-500 hover:text-zinc-300'}`}><PlusCircle size={20} /> Create Custom</button>
+
           </div>
 
           <div className="space-y-1">
@@ -437,8 +447,9 @@ const App: React.FC = () => {
         <header className="flex items-center justify-between p-6 md:p-10 bg-[#050505]/80 backdrop-blur-xl border-b border-zinc-900/50 sticky top-0 z-30">
           <div>
             <h2 className="text-3xl md:text-4xl font-black font-heading tracking-tight text-white uppercase">
-              {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Quiz Feed"))}
+              {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (viewMode === ViewMode.Queue ? "Autopost Queue" : (selectedCategory || "Quiz Feed")))}
             </h2>
+
             <p className="text-zinc-500 text-sm mt-1">
               {currentUser ? `Synced across devices as ${currentUser.email}` : "Sign in to sync your posts across all your devices"}
             </p>
@@ -522,10 +533,23 @@ const App: React.FC = () => {
                                 <span className="text-[10px] font-black uppercase tracking-wider text-[#0F4C81] px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-100">
                                   {post.category}
                                 </span>
-                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                                  {post.text_length || (parts.length > 1 ? 'medium' : 'short')}
-                                </span>
+                                <div className="flex items-center gap-1.5">
+                                  {post.scheduleStatus === 'queued' && (
+                                    <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Clock size={10} /> QUEUED
+                                    </span>
+                                  )}
+                                  {post.scheduleStatus === 'posted' && (
+                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-100 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Check size={10} /> POSTED
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                                    {post.text_length || (parts.length > 1 ? 'medium' : 'short')}
+                                  </span>
+                                </div>
                               </div>
+
                               <div className="space-y-2">
                                 {context && (
                                   <p className="text-sm font-semibold text-[#0F4C81] line-clamp-3">
@@ -572,8 +596,20 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <PostModal post={selectedPost} onClose={() => setSelectedPost(null)} />
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <PostModal 
+        post={selectedPost} 
+        onClose={() => setSelectedPost(null)} 
+        onPostUpdated={(updated) => {
+          setSelectedPost(updated);
+          setAllPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
+        }}
+      />
+      <SettingsModal 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+        userId={currentUser?.uid}
+      />
+
       {isSidebarOpen && <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
     </div>
   );

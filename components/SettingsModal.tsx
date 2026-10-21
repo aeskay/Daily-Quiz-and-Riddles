@@ -1,27 +1,59 @@
-import React, { useState } from 'react';
-import { X, Key, Check, AlertCircle, Loader2, Sparkles, Image as ImageIcon } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  X, Key, Check, AlertCircle, Loader2, Sparkles, 
+  Image as ImageIcon, Share2, Clock, Calendar, CheckSquare, Square
+} from 'lucide-react';
 import { getGeminiApiKey, setGeminiApiKey } from '../services/geminiService';
 import { getPixabayKey, setPixabayKey } from '../services/imageService';
 import { GoogleGenAI } from '@google/genai';
+import { SocialConfig } from '../types';
+import { getSocialConfig, saveSocialConfig, DEFAULT_SOCIAL_CONFIG } from '../services/socialService';
 
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSaved?: () => void;
+  userId?: string;
 }
 
-const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved }) => {
+const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved, userId }) => {
+  const [activeTab, setActiveTab] = useState<'ai' | 'social'>('social');
+  
+  // AI Keys
   const [geminiKey, setGeminiKey] = useState(getGeminiApiKey());
   const [pixabayKey, setPixabayVal] = useState(getPixabayKey());
   const [testingGemini, setTestingGemini] = useState(false);
   const [testStatus, setTestStatus] = useState<{ ok: boolean; msg: string } | null>(null);
+  
+  // Social Config
+  const [socialConfig, setSocialConfig] = useState<SocialConfig>(DEFAULT_SOCIAL_CONFIG);
+  const [loadingSocial, setLoadingSocial] = useState(false);
   const [saveMsg, setSaveMsg] = useState(false);
+  const [newTimeInput, setNewTimeInput] = useState('');
+
+  useEffect(() => {
+    if (isOpen && userId) {
+      setLoadingSocial(true);
+      getSocialConfig(userId)
+        .then((cfg) => setSocialConfig(cfg))
+        .finally(() => setLoadingSocial(false));
+    }
+  }, [isOpen, userId]);
 
   if (!isOpen) return null;
 
-  const handleSave = () => {
+  const handleSave = async () => {
     setGeminiApiKey(geminiKey);
     setPixabayKey(pixabayKey);
+
+    if (userId) {
+      try {
+        await saveSocialConfig(userId, socialConfig);
+      } catch (e) {
+        console.error("Failed to save social config:", e);
+      }
+    }
+
     setSaveMsg(true);
     setTimeout(() => {
       setSaveMsg(false);
@@ -60,20 +92,39 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved 
     }
   };
 
+  const addScheduleTime = () => {
+    if (!newTimeInput) return;
+    if (!socialConfig.scheduleTimes.includes(newTimeInput)) {
+      setSocialConfig({
+        ...socialConfig,
+        scheduleTimes: [...socialConfig.scheduleTimes, newTimeInput].sort(),
+      });
+    }
+    setNewTimeInput('');
+  };
+
+  const removeScheduleTime = (timeToRemove: string) => {
+    setSocialConfig({
+      ...socialConfig,
+      scheduleTimes: socialConfig.scheduleTimes.filter(t => t !== timeToRemove),
+    });
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md" onClick={onClose}>
       <div 
-        className="w-full max-w-lg bg-[#0e0e11] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl relative text-white"
+        className="w-full max-w-2xl bg-[#0e0e11] border border-zinc-800 rounded-3xl p-6 md:p-8 shadow-2xl relative text-white max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex justify-between items-center mb-6">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-5 shrink-0">
           <div className="flex items-center gap-3">
             <div className="p-2.5 bg-[#0477CF]/20 text-[#0477CF] rounded-2xl">
               <Key size={20} />
             </div>
             <div>
-              <h2 className="text-xl font-bold font-heading">Engine Settings</h2>
-              <p className="text-xs text-zinc-400">Configure your API keys</p>
+              <h2 className="text-xl font-bold font-heading">Settings & Autopost</h2>
+              <p className="text-xs text-zinc-400">Configure AI generation and automated social posting</p>
             </div>
           </div>
           <button onClick={onClose} className="p-2 text-zinc-400 hover:text-white rounded-xl">
@@ -81,91 +132,333 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved 
           </button>
         </div>
 
-        <div className="space-y-6">
-          {/* Gemini Key */}
-          <div className="space-y-2">
-            <div className="flex justify-between items-center">
-              <label className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
-                <Sparkles size={14} className="text-[#0477CF]" /> Google Gemini API Key
-              </label>
-              <a 
-                href="https://aistudio.google.com/app/apikey" 
-                target="_blank" 
-                rel="noreferrer" 
-                className="text-[11px] text-[#0477CF] hover:underline"
-              >
-                Get free key &rarr;
-              </a>
-            </div>
-            <input
-              type="password"
-              value={geminiKey}
-              onChange={(e) => setGeminiKey(e.target.value)}
-              placeholder="AIzaSy..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#0477CF]"
-            />
-            <div className="flex items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={handleTestKey}
-                disabled={testingGemini}
-                className="text-xs font-semibold px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
-              >
-                {testingGemini ? <Loader2 size={12} className="animate-spin" /> : null}
-                Test Connection
-              </button>
-            </div>
+        {/* Tabs */}
+        <div className="flex border-b border-zinc-800 mb-5 shrink-0">
+          <button
+            onClick={() => setActiveTab('social')}
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-colors ${activeTab === 'social' ? 'border-[#0477CF] text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
+          >
+            <Share2 size={15} /> Social Autopost (X, IG, FB, TikTok)
+          </button>
+          <button
+            onClick={() => setActiveTab('ai')}
+            className={`flex items-center gap-2 px-4 py-2.5 font-bold text-xs border-b-2 transition-colors ${activeTab === 'ai' ? 'border-[#0477CF] text-white' : 'border-transparent text-zinc-400 hover:text-zinc-200'}`}
+          >
+            <Sparkles size={15} /> AI & Engine Keys
+          </button>
+        </div>
 
-            {testStatus && (
-              <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${testStatus.ok ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
-                {testStatus.ok ? <Check size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
-                <span>{testStatus.msg}</span>
+        {/* Content Body */}
+        <div className="flex-1 overflow-y-auto pr-1 space-y-6">
+          {activeTab === 'social' && (
+            <div className="space-y-6">
+              {/* Autopilot Master Switch */}
+              <div className="bg-zinc-900/90 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
+                <div>
+                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Clock size={16} className="text-[#0477CF]" /> Background Autopilot
+                  </h4>
+                  <p className="text-xs text-zinc-400 mt-0.5">
+                    When enabled, the Firebase Cloud Scheduler publishes queued posts at your scheduled times automatically.
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSocialConfig({ ...socialConfig, autopostEnabled: !socialConfig.autopostEnabled })}
+                  className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${socialConfig.autopostEnabled ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
+                >
+                  {socialConfig.autopostEnabled ? 'ENABLED' : 'PAUSED'}
+                </button>
               </div>
-            )}
-          </div>
 
-          {/* Pixabay Key */}
-          <div className="space-y-2 pt-2 border-t border-zinc-800/80">
-            <div className="flex justify-between items-center">
-              <label className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
-                <ImageIcon size={14} className="text-emerald-400" /> Pixabay API Key (Optional)
-              </label>
-              <a 
-                href="https://pixabay.com/api/docs/" 
-                target="_blank" 
-                rel="noreferrer" 
-                className="text-[11px] text-emerald-400 hover:underline"
-              >
-                Get free key &rarr;
-              </a>
+              {/* Schedule Slots */}
+              <div className="space-y-3 bg-zinc-950/60 border border-zinc-850 p-4 rounded-2xl">
+                <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
+                  <Calendar size={14} className="text-[#0477CF]" /> Daily Posting Schedule Slots
+                </label>
+                <p className="text-[11px] text-zinc-400">
+                  Select what times of day you want posts published (e.g., 3 posts/day at 9 AM, 1 PM, 6 PM).
+                </p>
+
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {socialConfig.scheduleTimes.map((time) => (
+                    <span 
+                      key={time} 
+                      className="px-3 py-1.5 bg-zinc-800 border border-zinc-700 text-white rounded-xl text-xs font-semibold flex items-center gap-2"
+                    >
+                      {time}
+                      <button 
+                        onClick={() => removeScheduleTime(time)} 
+                        className="text-zinc-400 hover:text-red-400"
+                        title="Remove slot"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <input
+                    type="time"
+                    value={newTimeInput}
+                    onChange={(e) => setNewTimeInput(e.target.value)}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-1.5 text-xs text-white"
+                  />
+                  <button
+                    type="button"
+                    onClick={addScheduleTime}
+                    className="px-3 py-1.5 bg-[#0477CF] hover:bg-blue-600 text-white font-bold text-xs rounded-xl"
+                  >
+                    + Add Slot
+                  </button>
+                </div>
+              </div>
+
+              {/* 1. Twitter / X */}
+              <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-white">𝕏 Twitter</span>
+                    <a href="https://developer.x.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
+                      Developer Portal &rarr;
+                    </a>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={socialConfig.twitter.enabled}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        twitter: { ...socialConfig.twitter, enabled: e.target.checked }
+                      })}
+                      className="rounded"
+                    />
+                    Enable
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <input
+                    type="password"
+                    placeholder="API Key (Consumer Key)"
+                    value={socialConfig.twitter.apiKey}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, apiKey: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="password"
+                    placeholder="API Secret"
+                    value={socialConfig.twitter.apiSecret}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, apiSecret: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Access Token"
+                    value={socialConfig.twitter.accessToken}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, accessToken: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Access Secret"
+                    value={socialConfig.twitter.accessSecret}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, accessSecret: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* 2. Meta: Facebook & Instagram */}
+              <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-white">📸 Instagram & Facebook (Meta)</span>
+                    <a href="https://developers.facebook.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
+                      Graph API Explorer &rarr;
+                    </a>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={socialConfig.meta.postToInstagram}
+                        onChange={(e) => setSocialConfig({
+                          ...socialConfig,
+                          meta: { ...socialConfig.meta, postToInstagram: e.target.checked }
+                        })}
+                      />
+                      IG
+                    </label>
+                    <label className="flex items-center gap-1 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={socialConfig.meta.postToFacebook}
+                        onChange={(e) => setSocialConfig({
+                          ...socialConfig,
+                          meta: { ...socialConfig.meta, postToFacebook: e.target.checked }
+                        })}
+                      />
+                      FB Page
+                    </label>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <input
+                    type="text"
+                    placeholder="Facebook Page ID"
+                    value={socialConfig.meta.pageId}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, pageId: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Instagram Business/Creator ID"
+                    value={socialConfig.meta.instagramAccountId}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, instagramAccountId: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="password"
+                    placeholder="Long-Lived Page Access Token"
+                    value={socialConfig.meta.accessToken}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, accessToken: e.target.value } })}
+                    className="md:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
+
+              {/* 3. TikTok */}
+              <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-sm text-white">🎵 TikTok</span>
+                    <a href="https://developers.tiktok.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
+                      TikTok Developers &rarr;
+                    </a>
+                  </div>
+                  <label className="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={socialConfig.tiktok.enabled}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        tiktok: { ...socialConfig.tiktok, enabled: e.target.checked }
+                      })}
+                      className="rounded"
+                    />
+                    Enable
+                  </label>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
+                  <input
+                    type="password"
+                    placeholder="TikTok User Access Token"
+                    value={socialConfig.tiktok.accessToken}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, tiktok: { ...socialConfig.tiktok, accessToken: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                  <input
+                    type="text"
+                    placeholder="TikTok OpenID (optional)"
+                    value={socialConfig.tiktok.openId}
+                    onChange={(e) => setSocialConfig({ ...socialConfig, tiktok: { ...socialConfig.tiktok, openId: e.target.value } })}
+                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                  />
+                </div>
+              </div>
             </div>
-            <p className="text-xs text-zinc-400">
-              Enables searching 4+ million transparent vector illustrations. (Wikimedia Commons is used as default free fallback).
-            </p>
-            <input
-              type="password"
-              value={pixabayKey}
-              onChange={(e) => setPixabayVal(e.target.value)}
-              placeholder="e.g. 12345678-abcdef..."
-              className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500"
-            />
-          </div>
+          )}
 
-          <div className="pt-4 flex gap-3">
-            <button
-              onClick={handleSave}
-              className="flex-1 bg-[#0477CF] hover:bg-blue-600 font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg"
-            >
-              {saveMsg ? <Check size={18} /> : null}
-              {saveMsg ? 'Saved!' : 'Save Settings'}
-            </button>
-            <button
-              onClick={onClose}
-              className="px-5 py-3.5 bg-zinc-800 hover:bg-zinc-700 font-semibold rounded-xl text-zinc-300 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
+          {activeTab === 'ai' && (
+            <div className="space-y-6">
+              <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl text-xs text-blue-300">
+                💡 <b>Note:</b> If you already added your <code>API_KEY</code> and <code>PIXABAY_KEY</code> in the <b>Netlify dashboard</b>, they are automatically loaded. You only need to enter them here if you want to override them.
+              </div>
+
+              {/* Gemini Key */}
+              <div className="space-y-2">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
+                    <Sparkles size={14} className="text-[#0477CF]" /> Google Gemini API Key
+                  </label>
+                  <a 
+                    href="https://aistudio.google.com/app/apikey" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="text-[11px] text-[#0477CF] hover:underline"
+                  >
+                    Get free key &rarr;
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  value={geminiKey}
+                  onChange={(e) => setGeminiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#0477CF]"
+                />
+                <div className="flex items-center gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={handleTestKey}
+                    disabled={testingGemini}
+                    className="text-xs font-semibold px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 rounded-lg flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                  >
+                    {testingGemini ? <Loader2 size={12} className="animate-spin" /> : null}
+                    Test Connection
+                  </button>
+                </div>
+
+                {testStatus && (
+                  <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${testStatus.ok ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                    {testStatus.ok ? <Check size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+                    <span>{testStatus.msg}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Pixabay Key */}
+              <div className="space-y-2 pt-2 border-t border-zinc-800/80">
+                <div className="flex justify-between items-center">
+                  <label className="text-sm font-semibold flex items-center gap-2 text-zinc-200">
+                    <ImageIcon size={14} className="text-emerald-400" /> Pixabay API Key (Optional)
+                  </label>
+                  <a 
+                    href="https://pixabay.com/api/docs/" 
+                    target="_blank" 
+                    rel="noreferrer" 
+                    className="text-[11px] text-emerald-400 hover:underline"
+                  >
+                    Get free key &rarr;
+                  </a>
+                </div>
+                <input
+                  type="password"
+                  value={pixabayKey}
+                  onChange={(e) => setPixabayVal(e.target.value)}
+                  placeholder="e.g. 12345678-abcdef..."
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Footer Actions */}
+        <div className="pt-5 border-t border-zinc-800/80 flex gap-3 shrink-0">
+          <button
+            onClick={handleSave}
+            className="flex-1 bg-[#0477CF] hover:bg-blue-600 font-bold py-3.5 rounded-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 shadow-lg"
+          >
+            {saveMsg ? <Check size={18} /> : null}
+            {saveMsg ? 'Saved!' : 'Save Settings'}
+          </button>
+          <button
+            onClick={onClose}
+            className="px-5 py-3.5 bg-zinc-800 hover:bg-zinc-700 font-semibold rounded-xl text-zinc-300 transition-colors"
+          >
+            Close
+          </button>
         </div>
       </div>
     </div>
