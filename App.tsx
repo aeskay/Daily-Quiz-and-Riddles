@@ -137,12 +137,18 @@ const App: React.FC = () => {
       if (!config.autopostEnabled) return;
 
       const now = new Date();
-      const currentH = String(now.getHours()).padStart(2, '0');
-      const currentM = String(now.getMinutes()).padStart(2, '0');
-      const currentTimeStr = `${currentH}:${currentM}`;
+      const currentH = now.getHours();
+      const currentM = now.getMinutes();
+      const currentTotalMin = currentH * 60 + currentM;
 
-      const isDue = config.scheduleTimes.includes(currentTimeStr);
-      if (!isDue) return;
+      const matchedSlot = config.scheduleTimes.find(slot => {
+        const [sH, sM] = slot.split(':').map(Number);
+        const slotTotalMin = sH * 60 + sM;
+        const diff = currentTotalMin - slotTotalMin;
+        return diff >= 0 && diff <= 30;
+      });
+
+      if (!matchedSlot) return;
 
       const queuedPosts = allPosts.filter(p => p.scheduleStatus === 'queued');
       if (queuedPosts.length === 0) return;
@@ -150,21 +156,23 @@ const App: React.FC = () => {
       const nextPost = [...queuedPosts].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))[0];
       if (!nextPost) return;
 
-      const lockKey = `dqr_post_${nextPost.id}_${currentTimeStr}`;
+      const todayStr = now.toISOString().split('T')[0];
+      const lockKey = `dqr_post_${nextPost.id}_${matchedSlot}_${todayStr}`;
       if (sessionStorage.getItem(lockKey)) return;
       sessionStorage.setItem(lockKey, 'true');
 
       isBusy = true;
       try {
-        console.log(`[Auto-Dispatcher] Time matched (${currentTimeStr})! Posting ${nextPost.id}...`);
+        console.log(`[Auto-Dispatcher] Slot ${matchedSlot} due! Posting ${nextPost.id}...`);
         const res = await dispatchPostDirectly(nextPost, config, currentUser.uid);
         if (res.success) {
           setSuccessMsg(`🚀 Autoposted to ${res.platforms.join(', ')}!`);
         } else if (res.errors?.length) {
-          setError(`Autopost error: ${res.errors.join(' | ')}`);
+          setError(`Autopost notice: ${res.errors.join(' | ')}`);
         }
       } catch (err: any) {
         console.error("[Auto-Dispatcher] Failed:", err);
+        setError(`Autopost error: ${err?.message || err}`);
       } finally {
         isBusy = false;
       }

@@ -147,6 +147,10 @@ export async function dispatchPostDirectly(
     }
   }
 
+  if (platforms.length === 0 && errors.length === 0) {
+    errors.push("No platforms enabled or credentials missing. Please check 'FB Page' in Settings and ensure your Page Access Token and Page ID are saved.");
+  }
+
   const isSuccess = platforms.length > 0;
   const updatedPost: QuizPost = {
     ...post,
