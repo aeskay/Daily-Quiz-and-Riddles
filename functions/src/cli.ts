@@ -108,8 +108,7 @@ async function dispatchPostToSocials(
 export async function main() {
   console.log("Checking 24/7 background autopost queue...");
   const now = new Date();
-  const currentHours = String(now.getHours()).padStart(2, "0");
-  const currentMinutes = now.getMinutes();
+  const isManualRun = process.env.MANUAL_RUN === "true" || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
 
   const usersSnap = await db.collection("users").get();
 
@@ -119,33 +118,43 @@ export async function main() {
     if (!settingsDoc.exists) continue;
 
     const social = settingsDoc.data() as SocialSettings;
-    if (!social.autopostEnabled) {
+    if (!social.autopostEnabled && !isManualRun) {
       console.log(`Autopost paused for user ${userId}`);
       continue;
     }
 
+    const userTz = social.timezone || "America/Chicago";
+    const timeParts = new Intl.DateTimeFormat("en-US", {
+      timeZone: userTz,
+      hour: "numeric",
+      minute: "numeric",
+      hour12: false,
+    }).formatToParts(now);
+
+    const userH = Number(timeParts.find((p) => p.type === "hour")?.value || 0);
+    const userM = Number(timeParts.find((p) => p.type === "minute")?.value || 0);
+    const userTotalMinutes = userH * 60 + userM;
+
     const scheduleTimes = social.scheduleTimes || ["09:00", "13:00", "18:00"];
 
-    // Check if current time is within +/- 15 mins of a scheduled slot
-    const isSlotActive = scheduleTimes.some((slot) => {
+    // Check if current user time is within +/- 15 mins of a scheduled slot
+    const isSlotActive = isManualRun || scheduleTimes.some((slot) => {
       const [slotH, slotM] = slot.split(":").map(Number);
-      const diffMinutes = Math.abs((now.getHours() * 60 + currentMinutes) - (slotH * 60 + slotM));
+      const diffMinutes = Math.abs(userTotalMinutes - (slotH * 60 + slotM));
       return diffMinutes <= 15;
     });
 
     if (!isSlotActive) {
-      console.log(`Current time (${currentHours}:${currentMinutes}) is not within a scheduled slot for user ${userId}.`);
+      console.log(`User ${userId} local time (${userH}:${userM} in ${userTz}) is not within a scheduled slot.`);
       continue;
     }
 
-    // Find the next queued post
+    // Find all queued posts (sort in memory to avoid Firestore index requirements)
     const postsSnap = await db
       .collection("users")
       .doc(userId)
       .collection("posts")
       .where("scheduleStatus", "==", "queued")
-      .orderBy("timestamp", "asc")
-      .limit(1)
       .get();
 
     if (postsSnap.empty) {
@@ -153,7 +162,14 @@ export async function main() {
       continue;
     }
 
-    const nextPostDoc = postsSnap.docs[0];
+    // Sort earliest post first
+    const sortedDocs = postsSnap.docs.sort((a, b) => {
+      const tA = a.data().timestamp || 0;
+      const tB = b.data().timestamp || 0;
+      return tA - tB;
+    });
+
+    const nextPostDoc = sortedDocs[0];
     const nextPost = nextPostDoc.data();
 
     console.log(`Publishing post ${nextPostDoc.id} for user ${userId}...`);
