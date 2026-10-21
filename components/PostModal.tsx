@@ -303,8 +303,9 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       el.style.transform = 'none';
       return await htmlToImage.toPng(el, {
         quality: 1.0,
-        pixelRatio: 1.5,
+        pixelRatio: 1.2,
         backgroundColor: '#ffffff',
+        skipFonts: true,
       });
     } finally {
       el.style.transform = origTransform;
@@ -368,6 +369,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
         quality: 1.0,
         pixelRatio: 1.5,
         backgroundColor: '#ffffff',
+        skipFonts: true,
       });
       const link = document.createElement('a');
       link.download = `DQR-${post.id}.png`;
@@ -391,6 +393,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
         quality: 1.0,
         pixelRatio: 1.2,
         backgroundColor: '#ffffff',
+        skipFonts: true,
       });
       const title = questionText || contextText || 'Daily Quiz and Riddles';
       if (navigator.canShare && navigator.share) {

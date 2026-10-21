@@ -15,18 +15,26 @@ export async function uploadRenderedCard(
     throw new Error("Missing parameters for storage upload");
   }
 
-  const storageRef = ref(storage, `users/${userId}/posts/${postId}.png`);
-  
-  // uploadString with 'data_url' format handles "data:image/png;base64,..."
-  await uploadString(storageRef, dataUrl, 'data_url', {
-    contentType: 'image/png',
-    customMetadata: {
-      userId,
-      postId,
-      uploadedAt: new Date().toISOString()
-    }
-  });
+  try {
+    const storageRef = ref(storage, `users/${userId}/posts/${postId}.png`);
+    
+    // uploadString with 'data_url' format handles "data:image/png;base64,..."
+    await uploadString(storageRef, dataUrl, 'data_url', {
+      contentType: 'image/png',
+      customMetadata: {
+        userId,
+        postId,
+        uploadedAt: new Date().toISOString()
+      }
+    });
 
-  const downloadUrl = await getDownloadURL(storageRef);
-  return downloadUrl;
+    const downloadUrl = await getDownloadURL(storageRef);
+    return downloadUrl;
+  } catch (err: any) {
+    console.error("Firebase Storage upload error:", err);
+    throw new Error(
+      "Could not upload image to Firebase Storage. Please ensure Firebase Storage CORS is enabled on your bucket: " + (err?.message || err)
+    );
+  }
 }
+
