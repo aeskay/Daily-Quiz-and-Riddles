@@ -7,7 +7,7 @@ import { getGeminiApiKey, setGeminiApiKey } from '../services/geminiService';
 import { getPixabayKey, setPixabayKey } from '../services/imageService';
 import { GoogleGenAI } from '@google/genai';
 import { SocialConfig } from '../types';
-import { getSocialConfig, saveSocialConfig, DEFAULT_SOCIAL_CONFIG } from '../services/socialService';
+import { getSocialConfig, saveSocialConfig, DEFAULT_SOCIAL_CONFIG, getLocalSocialConfig } from '../services/socialService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -25,18 +25,18 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   const [testingGemini, setTestingGemini] = useState(false);
   const [testStatus, setTestStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   
-  // Social Config
-  const [socialConfig, setSocialConfig] = useState<SocialConfig>(DEFAULT_SOCIAL_CONFIG);
-  const [loadingSocial, setLoadingSocial] = useState(false);
+  // Social Config - Initialize immediately from localStorage so keys never disappear
+  const [socialConfig, setSocialConfig] = useState<SocialConfig>(() => getLocalSocialConfig());
   const [saveMsg, setSaveMsg] = useState(false);
   const [newTimeInput, setNewTimeInput] = useState('');
 
   useEffect(() => {
-    if (isOpen && userId) {
-      setLoadingSocial(true);
-      getSocialConfig(userId)
-        .then((cfg) => setSocialConfig(cfg))
-        .finally(() => setLoadingSocial(false));
+    if (isOpen) {
+      const local = getLocalSocialConfig();
+      setSocialConfig(local);
+      if (userId) {
+        getSocialConfig(userId).then((cfg) => setSocialConfig(cfg));
+      }
     }
   }, [isOpen, userId]);
 
@@ -45,14 +45,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   const handleSave = async () => {
     setGeminiApiKey(geminiKey);
     setPixabayKey(pixabayKey);
-
-    if (userId) {
-      try {
-        await saveSocialConfig(userId, socialConfig);
-      } catch (e) {
-        console.error("Failed to save social config:", e);
-      }
-    }
+    await saveSocialConfig(userId, socialConfig);
 
     setSaveMsg(true);
     setTimeout(() => {
@@ -61,6 +54,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
       onClose();
     }, 800);
   };
+
 
   const handleTestKey = async () => {
     if (!geminiKey.trim()) {

@@ -32,31 +32,66 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
   autopostEnabled: false,
 };
 
-/**
- * Loads the user's social media configuration from Firestore
- */
-export async function getSocialConfig(userId: string): Promise<SocialConfig> {
-  if (!userId) return DEFAULT_SOCIAL_CONFIG;
+const LOCAL_STORAGE_KEY = 'dqr_social_config';
+
+export function getLocalSocialConfig(): SocialConfig {
   try {
-    const configDocRef = doc(firestore, "users", userId, "settings", "social");
-    const snap = await getDoc(configDocRef);
-    if (snap.exists()) {
-      return { ...DEFAULT_SOCIAL_CONFIG, ...snap.data() } as SocialConfig;
+    const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+    if (saved) {
+      return { ...DEFAULT_SOCIAL_CONFIG, ...JSON.parse(saved) };
     }
-  } catch (err) {
-    console.warn("Could not load social config:", err);
+  } catch (e) {
+    console.warn("Local social config load error:", e);
   }
   return DEFAULT_SOCIAL_CONFIG;
 }
 
-/**
- * Saves the user's social media configuration to Firestore
- */
-export async function saveSocialConfig(userId: string, config: SocialConfig): Promise<void> {
-  if (!userId) throw new Error("User must be signed in to save social config.");
-  const configDocRef = doc(firestore, "users", userId, "settings", "social");
-  await setDoc(configDocRef, config, { merge: true });
+export function saveLocalSocialConfig(config: SocialConfig): void {
+  try {
+    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(config));
+  } catch (e) {
+    console.warn("Local social config save error:", e);
+  }
 }
+
+/**
+ * Loads the user's social media configuration from localStorage & Firestore
+ */
+export async function getSocialConfig(userId?: string): Promise<SocialConfig> {
+  const local = getLocalSocialConfig();
+  if (!userId) return local;
+
+  try {
+    const configDocRef = doc(firestore, "users", userId, "settings", "social");
+    const snap = await getDoc(configDocRef);
+    if (snap.exists()) {
+      const merged = { ...local, ...snap.data() } as SocialConfig;
+      saveLocalSocialConfig(merged);
+      return merged;
+    }
+  } catch (err) {
+    console.warn("Could not load social config from cloud, using local:", err);
+  }
+  return local;
+}
+
+/**
+ * Saves the user's social media configuration to both localStorage & Firestore
+ */
+export async function saveSocialConfig(userId: string | undefined, config: SocialConfig): Promise<void> {
+  // Always persist locally first so keys never vanish
+  saveLocalSocialConfig(config);
+
+  if (userId) {
+    try {
+      const configDocRef = doc(firestore, "users", userId, "settings", "social");
+      await setDoc(configDocRef, config, { merge: true });
+    } catch (err) {
+      console.warn("Cloud social config save warning:", err);
+    }
+  }
+}
+
 
 /**
  * Queues a post for automated scheduling
