@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, CheckCircle2, Info, Share2, Download, 
-  Image as ImageIcon, Loader2, Sparkles, Upload, 
+  Image as ImageIcon, Loader2, Upload, 
   Search, Edit3, ChevronRight 
 } from 'lucide-react';
 import { QuizPost } from '../types';
-import { generatePostImage } from '../services/geminiService';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import * as htmlToImage from 'html-to-image';
@@ -191,7 +190,6 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [vectorCandidates, setVectorCandidates] = useState<string[]>([]);
   const [imageLoading, setImageLoading] = useState(false);
-  const [generatingAI, setGeneratingAI] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
   
   // Editable fields
@@ -272,21 +270,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
     }
   };
 
-  const handleGenerateAI = async () => {
-    setGeneratingAI(true);
-    try {
-      const postToGen: QuizPost = { ...post, image_keyword: customKeyword || post.image_keyword };
-      const url = await generatePostImage(postToGen);
-      setImageUrl(url);
-      setVectorCandidates([url]);
-    } catch (err: any) {
-      // If Gemini image model is not available or quota-limited on free tier, seamlessly fetch top vector
-      console.warn("AI image note:", err.message);
-      await handleSearchImage();
-    } finally {
-      setGeneratingAI(false);
-    }
-  };
+
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -516,21 +500,13 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
                 </div>
               )}
 
-              {/* Upload & AI buttons */}
-              <div className="flex gap-2 pt-1">
+              {/* Upload button */}
+              <div className="pt-1">
                 <button
                   onClick={() => fileInputRef.current?.click()}
-                  className="flex-1 py-2 px-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-semibold text-zinc-300 flex items-center justify-center gap-1.5 transition-colors"
+                  className="w-full py-2.5 px-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 hover:text-white rounded-xl text-xs font-semibold text-zinc-300 flex items-center justify-center gap-2 transition-colors"
                 >
-                  <Upload size={13} /> Upload File
-                </button>
-                <button
-                  onClick={handleGenerateAI}
-                  disabled={generatingAI}
-                  className="flex-1 py-2 px-3 bg-zinc-950 border border-zinc-800 hover:border-zinc-700 rounded-xl text-xs font-semibold text-zinc-300 flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50"
-                >
-                  {generatingAI ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} className="text-[#0477CF]" />}
-                  AI Generate
+                  <Upload size={14} /> Upload Custom Image (PNG / SVG)
                 </button>
               </div>
             </div>
