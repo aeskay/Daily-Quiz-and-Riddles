@@ -6,6 +6,7 @@ import {
   onSnapshot, 
   query, 
   orderBy, 
+  getDocs,
   writeBatch,
   Unsubscribe 
 } from "firebase/firestore";
@@ -87,4 +88,20 @@ export async function deleteUserPost(userId: string, postId: string): Promise<vo
   if (!userId || !postId) return;
   const postDoc = doc(getUserPostsRef(userId), postId);
   await deleteDoc(postDoc);
+}
+
+/**
+ * Deletes all posts from the user's Firestore subcollection (Wipe & Reset)
+ */
+export async function clearAllUserPosts(userId: string): Promise<void> {
+  if (!userId) return;
+  const postsCol = getUserPostsRef(userId);
+  const snapshot = await getDocs(postsCol);
+  if (snapshot.empty) return;
+
+  const batch = writeBatch(firestore);
+  snapshot.forEach((docSnap) => {
+    batch.delete(docSnap.ref);
+  });
+  await batch.commit();
 }

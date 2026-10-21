@@ -16,7 +16,8 @@ import {
   subscribeToUserPosts, 
   saveUserPosts, 
   deleteUserPost, 
-  updateUserPost 
+  updateUserPost,
+  clearAllUserPosts
 } from './services/firestoreService';
 import * as db from './services/dbService';
 
@@ -56,21 +57,7 @@ const App: React.FC = () => {
     setLoading(true);
     const unsubscribePosts = subscribeToUserPosts(
       currentUser.uid,
-      async (cloudPosts) => {
-        // If Firestore is empty, check if we have local IndexedDB posts to migrate
-        if (cloudPosts.length === 0) {
-          try {
-            const localPosts = await db.getAllPosts();
-            if (localPosts.length > 0) {
-              const postsToMigrate = localPosts.map(p => ({ ...p, userId: currentUser.uid }));
-              await saveUserPosts(currentUser.uid, postsToMigrate);
-              setSuccessMsg(`Migrated ${localPosts.length} posts to your cloud account.`);
-              return;
-            }
-          } catch (e) {
-            console.warn("Local migration check:", e);
-          }
-        }
+      (cloudPosts) => {
         setAllPosts(cloudPosts);
         setLoading(false);
       },
@@ -238,6 +225,27 @@ const App: React.FC = () => {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleWipeAllPosts = async () => {
+    if (!currentUser) return;
+    const confirmed = window.confirm(
+      "Are you sure you want to delete ALL posts from Cloud Firestore and local storage? This will clear out old/broken posts so you can start fresh."
+    );
+    if (!confirmed) return;
+
+    setLoading(true);
+    try {
+      await clearAllUserPosts(currentUser.uid);
+      await db.clearAllLocalPosts();
+      setAllPosts([]);
+      setSuccessMsg("All posts wiped from Cloud Firestore and local storage. Click 'GENERATE NEW' to create fresh posts!");
+    } catch (err: any) {
+      console.error("Wipe failed:", err);
+      setError("Failed to wipe posts: " + (err?.message || err));
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filteredPosts = useMemo(() => {
@@ -409,7 +417,17 @@ const App: React.FC = () => {
             <button onClick={() => setIsSettingsOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><SettingsIcon size={18} /> API & Keys Settings</button>
             <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup Database JSON</button>
             <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
+            {currentUser && (
+              <button 
+                onClick={handleWipeAllPosts} 
+                className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-red-400 hover:text-red-300 hover:bg-red-500/10 transition-all font-medium text-xs mt-2"
+                title="Wipe all posts from Firestore and local device storage"
+              >
+                <Trash2 size={18} /> Wipe All Posts (Reset)
+              </button>
+            )}
           </div>
+
           
           <div className="h-24" aria-hidden="true" />
         </div>

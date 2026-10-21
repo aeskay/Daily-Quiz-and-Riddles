@@ -56,6 +56,17 @@ export const deletePostFromDB = async (id: string): Promise<void> => {
   });
 };
 
+export const clearAllLocalPosts = async (): Promise<void> => {
+  const db = await initDB();
+  return new Promise((resolve, reject) => {
+    const transaction = db.transaction(STORE_NAME, 'readwrite');
+    const store = transaction.objectStore(STORE_NAME);
+    const request = store.clear();
+    request.onsuccess = () => resolve();
+    request.onerror = () => reject(request.error);
+  });
+};
+
 export const exportDatabase = async (): Promise<string> => {
   const posts = await getAllPosts();
   return JSON.stringify(posts, null, 2);
@@ -66,3 +77,4 @@ export const importDatabase = async (jsonString: string): Promise<void> => {
   if (!Array.isArray(posts)) throw new Error("Invalid backup format");
   await savePosts(posts);
 };
+
