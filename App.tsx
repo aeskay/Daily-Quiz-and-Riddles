@@ -21,6 +21,8 @@ import {
   clearAllUserPosts
 } from './services/firestoreService';
 import * as db from './services/dbService';
+import { getLocalSocialConfig } from './services/socialService';
+import { dispatchPostDirectly } from './services/socialDirectService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -121,6 +123,55 @@ const App: React.FC = () => {
       setError("Sign out failed.");
     }
   };
+
+  // Automated background queue watcher: checks every 10 seconds
+  useEffect(() => {
+    if (!currentUser) return;
+
+    let isBusy = false;
+
+    const timer = setInterval(async () => {
+      if (isBusy) return;
+
+      const config = getLocalSocialConfig();
+      if (!config.autopostEnabled) return;
+
+      const now = new Date();
+      const currentH = String(now.getHours()).padStart(2, '0');
+      const currentM = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentH}:${currentM}`;
+
+      const isDue = config.scheduleTimes.includes(currentTimeStr);
+      if (!isDue) return;
+
+      const queuedPosts = allPosts.filter(p => p.scheduleStatus === 'queued');
+      if (queuedPosts.length === 0) return;
+
+      const nextPost = [...queuedPosts].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0))[0];
+      if (!nextPost) return;
+
+      const lockKey = `dqr_post_${nextPost.id}_${currentTimeStr}`;
+      if (sessionStorage.getItem(lockKey)) return;
+      sessionStorage.setItem(lockKey, 'true');
+
+      isBusy = true;
+      try {
+        console.log(`[Auto-Dispatcher] Time matched (${currentTimeStr})! Posting ${nextPost.id}...`);
+        const res = await dispatchPostDirectly(nextPost, config, currentUser.uid);
+        if (res.success) {
+          setSuccessMsg(`🚀 Autoposted to ${res.platforms.join(', ')}!`);
+        } else if (res.errors?.length) {
+          setError(`Autopost error: ${res.errors.join(' | ')}`);
+        }
+      } catch (err: any) {
+        console.error("[Auto-Dispatcher] Failed:", err);
+      } finally {
+        isBusy = false;
+      }
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, [currentUser, allPosts]);
 
   const handleLoadMore = async () => {
     if (!currentUser) {
