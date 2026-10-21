@@ -1,14 +1,16 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  RefreshCw, Flame, Menu, X, AlertCircle, ChevronRight, TrendingUp, 
+  Flame, Menu, X, AlertCircle, TrendingUp, 
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
-  Archive, ArchiveRestore, Plus, Download, Upload, Database, Check
+  Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
+  Settings as SettingsIcon, Image as ImageIcon
 } from 'lucide-react';
 import { QuizPost, Category, ViewMode } from './types';
 import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
 import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
 import PostModal from './components/PostModal';
+import SettingsModal from './components/SettingsModal';
 import * as db from './services/dbService';
 
 const App: React.FC = () => {
@@ -20,18 +22,60 @@ const App: React.FC = () => {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<QuizPost | null>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Initial DB Load
+  // Semantic similarity checker to prevent rephrased identical puzzles
+  const arePuzzlesSimilar = (text1: string, text2: string): boolean => {
+    const stopWords = new Set([
+      'you', 'have', 'imagine', 'suppose', 'there', 'are', 'in', 'a', 'an', 'the', 
+      'is', 'it', 'its', 'to', 'and', 'of', 'for', 'with', 'that', 'this', 'how', 
+      'many', 'what', 'which', 'who', 'why', 'can', 'will', 'would', 'do', 'does', 
+      'did', 'completely', 'dark', 'identical', 'consider', 'say', 'one', 'two'
+    ]);
+    const getKeywords = (txt: string) => new Set(
+      txt.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter(w => w.length > 2 && !stopWords.has(w))
+    );
+    const k1 = getKeywords(text1);
+    const k2 = getKeywords(text2);
+    if (k1.size === 0 || k2.size === 0) return false;
+    let matches = 0;
+    for (const w of k1) {
+      if (k2.has(w)) matches++;
+    }
+    const similarity = matches / Math.min(k1.size, k2.size);
+    return similarity >= 0.55; // 55% keyword overlap = duplicate riddle
+  };
+
+  // Initial DB Load with Auto-Deduplication
   useEffect(() => {
     const loadFromDB = async () => {
       try {
         const stored = await db.getAllPosts();
-        setAllPosts(stored);
-        if (stored.length === 0) {
+        
+        // Clean out any duplicates sitting in the user's database
+        const uniqueStored: QuizPost[] = [];
+        const duplicateIdsToDelete: string[] = [];
+
+        for (const post of stored) {
+          const isDupe = uniqueStored.some(existing => arePuzzlesSimilar(existing.visual_text, post.visual_text));
+          if (isDupe) {
+            duplicateIdsToDelete.push(post.id);
+          } else {
+            uniqueStored.push(post);
+          }
+        }
+
+        // Delete duplicates from IndexedDB
+        for (const id of duplicateIdsToDelete) {
+          await db.deletePostFromDB(id);
+        }
+
+        setAllPosts(uniqueStored);
+        if (uniqueStored.length === 0) {
           handleLoadMore();
         }
       } catch (err) {
@@ -44,7 +88,7 @@ const App: React.FC = () => {
   // Show auto-fading success messages
   useEffect(() => {
     if (successMsg) {
-      const timer = setTimeout(() => setSuccessMsg(null), 3000);
+      const timer = setTimeout(() => setSuccessMsg(null), 3500);
       return () => clearTimeout(timer);
     }
   }, [successMsg]);
@@ -53,25 +97,36 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const prompt = selectedCategory 
-        ? Prompts.getCategory(selectedCategory, true) 
-        : Prompts.refresh();
+      // Build a list of recent titles and topics to forbid in the prompt
+      const recentTitles = allPosts
+        .slice(-30)
+        .map(p => p.visual_text.split('|')[0].trim())
+        .filter(Boolean);
+
+      const prompt = selectedCategory
+        ? Prompts.getCategory(selectedCategory, recentTitles)
+        : Prompts.refresh(recentTitles);
 
       const newPosts = await fetchQuizPosts(prompt);
-      const postsToSave: QuizPost[] = newPosts.map(p => ({ 
-        ...p, 
-        timestamp: Date.now(), 
-        status: 'active' 
-      }));
-      
-      await db.savePosts(postsToSave);
-      setAllPosts(prev => [...prev, ...postsToSave]);
-      setSuccessMsg(`Fetched ${postsToSave.length} new enigmas.`);
+
+      // Semantic deduplication: reject if similar to ANY existing post
+      const uniquePosts = newPosts.filter(newP => {
+        const isDupe = allPosts.some(existing => arePuzzlesSimilar(existing.visual_text, newP.visual_text));
+        return !isDupe;
+      });
+
+      const postsToSave = uniquePosts.map(p => ({ ...p, timestamp: Date.now(), status: 'active' as const }));
+
+      if (postsToSave.length > 0) {
+        await db.savePosts(postsToSave);
+        setAllPosts(prev => [...prev, ...postsToSave]);
+        setSuccessMsg(`Generated ${postsToSave.length} new unique posts (filtered repeats).`);
+      } else {
+        setSuccessMsg("Filtered repeats. Generating fresh topics...");
+      }
     } catch (err: any) {
       console.error("Engine failure:", err);
-      setError(err?.message?.includes('429') 
-        ? 'Rate limit hit. Using existing local database. Try again in a minute.' 
-        : 'Engine stalled. Check connection.');
+      setError(err?.message || 'Generation failed. Check API key in Settings.');
     } finally {
       setLoading(false);
     }
@@ -81,6 +136,7 @@ const App: React.FC = () => {
     try {
       await db.deletePostFromDB(id);
       setAllPosts(prev => prev.filter(p => p.id !== id));
+      setSuccessMsg("Post deleted.");
     } catch (err) {
       setError("Failed to delete post from database.");
     }
@@ -94,6 +150,7 @@ const App: React.FC = () => {
     try {
       await db.savePosts([updatedPost]);
       setAllPosts(prev => prev.map(p => p.id === post.id ? updatedPost : p));
+      setSuccessMsg(updatedPost.status === 'archived' ? 'Post archived.' : 'Post restored to feed.');
     } catch (err) {
       setError("Failed to update post status.");
     }
@@ -170,8 +227,9 @@ const App: React.FC = () => {
       setSelectedPost(postWithMeta);
       setCustomPrompt('');
       setViewMode(ViewMode.Today);
+      setSuccessMsg("Custom post generated successfully.");
     } catch (err: any) {
-      setError(err?.message?.includes('429') ? 'Rate limit hit.' : 'Generation failed.');
+      setError(err?.message || 'Generation failed. Check your API key in Settings.');
     } finally {
       setIsGeneratingCustom(false);
     }
@@ -187,7 +245,10 @@ const App: React.FC = () => {
           <div className="px-2 py-1 bg-[#0477CF] text-white rounded font-black text-xs tracking-tighter">DQ&R</div>
           <h1 className="text-lg font-bold font-heading text-white">{viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Viral Feed")}</h1>
         </div>
-        <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-zinc-400 hover:text-white"><Menu /></button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-zinc-400 hover:text-white"><SettingsIcon size={20} /></button>
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-zinc-400 hover:text-white"><Menu size={22} /></button>
+        </div>
       </div>
 
       <aside 
@@ -201,19 +262,24 @@ const App: React.FC = () => {
           <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-zinc-500 hover:text-white"><X size={24} /></button>
         </div>
 
-        <div className="hidden md:flex items-center gap-3 p-8 border-b border-zinc-900 shrink-0">
-          <div className="px-3 py-1 bg-[#0477CF] text-white rounded-lg font-black text-xl tracking-tighter">DQ&R</div>
-          <h1 className="text-xl font-black font-heading tracking-tight leading-tight text-white">Daily Quiz <br/><span className="text-zinc-500 font-light">& Riddles</span></h1>
+        <div className="hidden md:flex items-center justify-between p-8 border-b border-zinc-900 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="px-3 py-1 bg-[#0477CF] text-white rounded-lg font-black text-xl tracking-tighter">DQ&R</div>
+            <h1 className="text-xl font-black font-heading tracking-tight leading-tight text-white">Daily Quiz <br/><span className="text-zinc-500 font-light">& Riddles</span></h1>
+          </div>
+          <button 
+            onClick={() => setIsSettingsOpen(true)}
+            className="p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors"
+            title="API Settings"
+          >
+            <SettingsIcon size={19} />
+          </button>
         </div>
 
-        {/* 
-          SCROLLING MENU CONTAINER
-          Enhanced scrolling with overscroll-contain and significant padding-bottom 
-          to ensure the last items are always reachable even with mobile browser UI.
-        */}
-        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-8 overscroll-contain scroll-smooth">
+        {/* Scrolling Menu */}
+        <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-7 overscroll-contain scroll-smooth">
           <div className="space-y-1">
-            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
+            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
             <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <div className="flex items-center gap-3"><Flame size={20} /> Feed</div>
               <span className="text-[10px] font-bold opacity-50">{stats.active}</span>
@@ -226,7 +292,7 @@ const App: React.FC = () => {
           </div>
 
           <div className="space-y-1">
-            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutGrid size={12} /> CHANNELS</h2>
+            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2"><LayoutGrid size={12} /> CATEGORIES</h2>
             {CATEGORIES_CONFIG.map((cat) => (
               <button key={cat.name} onClick={() => handleCategorySelect(cat.name as Category)} className={`w-full flex items-center justify-between px-4 py-3 rounded-xl font-medium transition-all ${selectedCategory === cat.name && viewMode !== ViewMode.Archive ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
                 <div className="flex items-center gap-3"><span className={cat.color}>{cat.icon}</span>{cat.name}</div>
@@ -234,17 +300,14 @@ const App: React.FC = () => {
             ))}
           </div>
 
-          <div className="pt-8 border-t border-zinc-900 space-y-1">
-            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2"><Database size={12} /> DATABASE</h2>
-            <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup JSON</button>
-            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
+          <div className="pt-6 border-t border-zinc-900 space-y-1">
+            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Database size={12} /> SYSTEM</h2>
+            <button onClick={() => setIsSettingsOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><SettingsIcon size={18} /> API & Keys Settings</button>
+            <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup Database</button>
+            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore Database</button>
           </div>
           
-          {/* 
-            Extra padding at the bottom of the sidebar to ensure Backup/Restore 
-            options are not hidden by mobile browser UI.
-          */}
-          <div className="h-40 md:h-20" aria-hidden="true" />
+          <div className="h-24" aria-hidden="true" />
         </div>
       </aside>
 
@@ -252,16 +315,16 @@ const App: React.FC = () => {
         <header className="flex items-center justify-between p-6 md:p-10 bg-[#050505]/80 backdrop-blur-xl border-b border-zinc-900/50 sticky top-0 z-30">
           <div>
             <h2 className="text-3xl md:text-4xl font-black font-heading tracking-tight text-white uppercase">
-              {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Viral Feed"))}
+              {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Quiz Feed"))}
             </h2>
             <p className="text-zinc-500 text-sm mt-1">
-              {viewMode === ViewMode.Archive ? "Manage your history" : "AI-Powered engagement hooks"}
+              {viewMode === ViewMode.Archive ? "Manage your archived posts" : "Generate, preview & export social media posts"}
             </p>
           </div>
           {viewMode !== ViewMode.Generate && viewMode !== ViewMode.Archive && (
             <button onClick={handleLoadMore} disabled={loading} className="px-6 py-3 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-xl font-bold">
               {loading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-              LOAD MORE
+              GENERATE NEW
             </button>
           )}
         </header>
@@ -269,56 +332,86 @@ const App: React.FC = () => {
         <div className="flex-1 p-6 md:p-12 bg-zinc-950">
           <div className="max-w-7xl mx-auto">
             {/* Notification Area */}
-            {error && <div className="bg-red-500/10 border border-red-500/20 p-6 rounded-2xl flex items-center gap-4 text-red-400 mb-8 animate-in slide-in-from-top"><AlertCircle size={24} /><p className="font-medium">{error}</p></div>}
-            {successMsg && <div className="bg-emerald-500/10 border border-emerald-500/20 p-6 rounded-2xl flex items-center gap-4 text-emerald-400 mb-8 animate-in slide-in-from-top"><Check size={24} /><p className="font-medium">{successMsg}</p></div>}
+            {error && (
+              <div className="bg-red-500/10 border border-red-500/20 p-5 rounded-2xl flex items-center justify-between text-red-400 mb-8 animate-in slide-in-from-top gap-4">
+                <div className="flex items-center gap-3">
+                  <AlertCircle size={22} className="shrink-0" />
+                  <p className="font-medium text-sm">{error}</p>
+                </div>
+                <button 
+                  onClick={() => setIsSettingsOpen(true)} 
+                  className="px-3.5 py-1.5 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded-xl text-xs font-bold shrink-0 transition-colors"
+                >
+                  Configure Key
+                </button>
+              </div>
+            )}
+            {successMsg && (
+              <div className="bg-emerald-500/10 border border-emerald-500/20 p-5 rounded-2xl flex items-center gap-3 text-emerald-400 mb-8 animate-in slide-in-from-top">
+                <Check size={20} />
+                <p className="font-medium text-sm">{successMsg}</p>
+              </div>
+            )}
             
             {viewMode === ViewMode.Generate ? (
-              <div className="max-w-2xl mx-auto space-y-12 py-10">
-                <div className="text-center space-y-4">
+              <div className="max-w-2xl mx-auto space-y-10 py-10">
+                <div className="text-center space-y-3">
                    <div className="mx-auto w-16 h-16 bg-[#0477CF]/10 rounded-3xl flex items-center justify-center text-[#0477CF] mb-4"><PlusCircle size={32} /></div>
-                   <h3 className="text-3xl font-black text-white font-heading">The AI Creator</h3>
-                   <p className="text-zinc-500">Specify exactly what you want to generate. It will be saved to your database.</p>
+                   <h3 className="text-3xl font-black text-white font-heading">Custom Post Creator</h3>
+                   <p className="text-zinc-500 text-sm">Specify a topic, riddle idea, or trivia question. It will be generated and saved.</p>
                 </div>
                 <form onSubmit={handleCustomGenerate} className="space-y-4">
-                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A riddle about the internet..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-lg shadow-inner" />
-                   <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-5 rounded-3xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest">{isGeneratingCustom ? <Loader2 className="animate-spin" /> : <Send />} GENERATE & SAVE</button>
+                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A riddle about torn book pages and math logic..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-base shadow-inner" />
+                   <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-lg">{isGeneratingCustom ? <Loader2 className="animate-spin" /> : <Send size={18} />} GENERATE & DESIGN</button>
                 </form>
               </div>
             ) : (
               <div className="pb-40">
-                {/* 
-                  Updated Grid Layout: 
-                  - Using requested gap-y-20 and gap-x-12.
-                */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-x-12 gap-y-20">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {filteredPosts.map((post) => {
-                    const [question, hook] = post.visual_text.split('|').map(s => s.trim());
+                    const parts = post.visual_text.split('|').map(s => s.trim());
+                    const context = parts.length > 1 ? parts[0] : null;
+                    const question = parts.length > 1 ? parts[1] : parts[0];
+
                     return (
                       <div key={post.id} className="group relative">
                         <ThemeWrapper styleHint={post.style_hint} onClick={() => setSelectedPost(post)}>
-                          <div className="h-full flex flex-col justify-between min-h-[18rem]">
+                          <div className="h-full flex flex-col justify-between min-h-[16rem]">
                             <div>
-                              <div className="flex justify-between items-start mb-6">
-                                <span className="text-[9px] font-black uppercase tracking-[0.2em] text-zinc-500 px-2 py-1 bg-zinc-100 rounded-md border border-zinc-200">{post.category}</span>
-                                <TrendingUp size={14} className="text-[#0477CF] opacity-30" />
+                              <div className="flex justify-between items-start mb-4">
+                                <span className="text-[10px] font-black uppercase tracking-wider text-[#0F4C81] px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-100">
+                                  {post.category}
+                                </span>
+                                <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
+                                  {post.text_length || (parts.length > 1 ? 'medium' : 'short')}
+                                </span>
                               </div>
                               <div className="space-y-2">
-                                <h3 className={`text-xl font-bold font-heading leading-tight text-zinc-900 ${post.category.includes('Math') ? 'font-mono-math' : ''}`}>{question}</h3>
-                                {hook && <p className="text-xs font-bold text-red-600 uppercase tracking-tighter">{hook}</p>}
+                                {context && (
+                                  <p className="text-sm font-semibold text-[#0F4C81] line-clamp-3">
+                                    {context}
+                                  </p>
+                                )}
+                                <h3 className="text-lg font-bold font-heading text-[#D92D46] leading-snug line-clamp-2">
+                                  {question}
+                                </h3>
                               </div>
                             </div>
-                            <div className="pt-6 flex items-center justify-between border-t border-zinc-100">
-                              <span className="text-[9px] font-black tracking-widest text-[#0477CF] uppercase">Review Case</span>
-                              <Share2 size={14} className="text-[#0477CF] opacity-40" />
+
+                            <div className="pt-4 flex items-center justify-between border-t border-zinc-100 mt-4">
+                              <span className="text-[10px] font-black tracking-wider text-[#0477CF] uppercase flex items-center gap-1.5">
+                                <ImageIcon size={13} /> Design & Export
+                              </span>
+                              <Share2 size={14} className="text-[#0477CF] opacity-40 group-hover:opacity-100 transition-opacity" />
                             </div>
                           </div>
                         </ThemeWrapper>
 
-                        <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); toggleArchive(post); }} className={`p-2 rounded-lg shadow-xl text-white transition-all ${post.status === 'archived' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-zinc-800 hover:bg-zinc-700'}`} title={post.status === 'archived' ? 'Unarchive' : 'Archive'}>
-                            {post.status === 'archived' ? <ArchiveRestore size={16} /> : <Archive size={16} />}
+                        <div className="absolute top-4 right-4 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={(e) => { e.stopPropagation(); toggleArchive(post); }} className={`p-2 rounded-xl shadow-lg text-white transition-all ${post.status === 'archived' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-zinc-800 hover:bg-zinc-700'}`} title={post.status === 'archived' ? 'Unarchive' : 'Archive'}>
+                            {post.status === 'archived' ? <ArchiveRestore size={15} /> : <Archive size={15} />}
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); deletePost(post.id); }} className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-lg shadow-xl transition-all" title="Delete"><Trash2 size={16} /></button>
+                          <button onClick={(e) => { e.stopPropagation(); deletePost(post.id); }} className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-xl shadow-lg transition-all" title="Delete"><Trash2 size={15} /></button>
                         </div>
                       </div>
                     );
@@ -326,11 +419,11 @@ const App: React.FC = () => {
                 </div>
 
                 {filteredPosts.length === 0 && !loading && (
-                   <div className="text-center py-32 bg-zinc-900/20 rounded-[3rem] border border-zinc-800 border-dashed mt-10">
-                      <Database className="mx-auto text-zinc-800 mb-6" size={64} />
-                      <h3 className="text-2xl font-bold text-zinc-500">Database Empty</h3>
-                      <p className="text-zinc-600 mt-2 mb-8">No enigmas found in this section.</p>
-                      <button onClick={handleLoadMore} className="bg-zinc-800 hover:bg-zinc-700 px-8 py-4 rounded-2xl text-white font-bold transition-all active:scale-95">Fetch Initial Content</button>
+                   <div className="text-center py-28 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed mt-6">
+                      <Database className="mx-auto text-zinc-700 mb-4" size={48} />
+                      <h3 className="text-xl font-bold text-zinc-400">Database Empty</h3>
+                      <p className="text-zinc-500 text-sm mt-1 mb-6">No posts found in this section.</p>
+                      <button onClick={handleLoadMore} className="bg-[#0477CF] hover:bg-blue-600 px-6 py-3 rounded-2xl text-white font-bold transition-all text-sm">Generate Initial Posts</button>
                    </div>
                 )}
               </div>
@@ -340,6 +433,7 @@ const App: React.FC = () => {
       </main>
 
       <PostModal post={selectedPost} onClose={() => setSelectedPost(null)} />
+      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
       {isSidebarOpen && <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
     </div>
   );
