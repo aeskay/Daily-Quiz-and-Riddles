@@ -148,14 +148,9 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
             <div className="space-y-6">
               {/* Autopilot Master Switch */}
               <div className="bg-zinc-900/90 border border-zinc-800 p-4 rounded-2xl flex items-center justify-between">
-                <div>
-                  <h4 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Clock size={16} className="text-[#0477CF]" /> Background Autopilot
-                  </h4>
-                  <p className="text-xs text-zinc-400 mt-0.5">
-                    When enabled, the Firebase Cloud Scheduler publishes queued posts at your scheduled times automatically.
-                  </p>
-                </div>
+                <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                  <Clock size={16} className="text-[#0477CF]" /> Background Autopilot
+                </h4>
                 <button
                   onClick={() => setSocialConfig({ ...socialConfig, autopostEnabled: !socialConfig.autopostEnabled })}
                   className={`px-4 py-2 rounded-xl font-bold text-xs transition-all ${socialConfig.autopostEnabled ? 'bg-emerald-500 text-black' : 'bg-zinc-800 text-zinc-400 hover:text-white'}`}
@@ -167,11 +162,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
               {/* Schedule Slots */}
               <div className="space-y-3 bg-zinc-950/60 border border-zinc-850 p-4 rounded-2xl">
                 <label className="text-xs font-bold text-zinc-300 flex items-center gap-2">
-                  <Calendar size={14} className="text-[#0477CF]" /> Daily Posting Schedule Slots
+                  <Calendar size={14} className="text-[#0477CF]" /> Daily Schedule
                 </label>
-                <p className="text-[11px] text-zinc-400">
-                  Select what times of day you want posts published (e.g., 3 posts/day at 9 AM, 1 PM, 6 PM).
-                </p>
 
                 <div className="flex flex-wrap gap-2 pt-1">
                   {socialConfig.scheduleTimes.map((time) => (
@@ -208,28 +200,20 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                 </div>
               </div>
 
-              {/* Free Image Hosting (ImgBB - 100% Free, No Credit Card) */}
-              <div className="border border-emerald-500/30 bg-emerald-950/20 p-4 rounded-2xl space-y-2">
+              {/* Image Hosting (ImgBB) */}
+              <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-emerald-400">🖼️ Image Hosting (ImgBB)</span>
-                    <a href="https://api.imgbb.com" target="_blank" rel="noreferrer" className="text-[10px] text-emerald-400 underline font-bold">
-                      Get Free API Key &rarr;
-                    </a>
-                  </div>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-bold">
-                    100% Free · No Card
-                  </span>
+                  <span className="font-bold text-sm text-white">🖼️ Image Hosting (ImgBB)</span>
+                  <a href="https://api.imgbb.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
+                    Get Free Key &rarr;
+                  </a>
                 </div>
-                <p className="text-[11px] text-zinc-400 leading-relaxed">
-                  Instagram and Facebook require a public web URL to display your quiz cards. ImgBB provides unlimited free image hosting with <b>zero credit card or billing</b> required.
-                </p>
                 <input
                   type="password"
-                  placeholder="Paste your free ImgBB API Key here"
+                  placeholder="ImgBB API Key"
                   value={socialConfig.imgbbApiKey || ''}
                   onChange={(e) => setSocialConfig({ ...socialConfig, imgbbApiKey: e.target.value })}
-                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
                 />
               </div>
 
@@ -390,9 +374,6 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
 
           {activeTab === 'ai' && (
             <div className="space-y-6">
-              <div className="bg-blue-500/10 border border-blue-500/20 p-3 rounded-xl text-xs text-blue-300">
-                💡 <b>Note:</b> If you already added your <code>API_KEY</code> and <code>PIXABAY_KEY</code> in the <b>Netlify dashboard</b>, they are automatically loaded. You only need to enter them here if you want to override them.
-              </div>
 
               {/* Gemini Key */}
               <div className="space-y-2">

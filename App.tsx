@@ -490,9 +490,9 @@ const App: React.FC = () => {
             {!currentUser && !authLoading && (
               <div className="bg-gradient-to-r from-blue-900/30 via-zinc-900 to-zinc-900 border border-[#0477CF]/30 p-8 rounded-3xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
                 <div>
-                  <h3 className="text-xl font-bold text-white mb-2">Sync Your Posts Everywhere</h3>
-                  <p className="text-zinc-400 text-sm max-w-xl">
-                    Sign in with Google so your generated posts are saved to your account in the cloud. You'll be able to view, edit, and download them on your phone, laptop, or tablet without regenerating or burning extra tokens.
+                  <h3 className="text-xl font-bold text-white mb-1">Sync Posts</h3>
+                  <p className="text-zinc-400 text-xs">
+                    Sign in with Google to sync your posts across all devices.
                   </p>
                 </div>
                 <button
