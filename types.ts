@@ -65,6 +65,7 @@ export interface SocialConfig {
   scheduleTimes: string[]; // e.g. ["09:00", "13:00", "18:00"]
   timezone: string; // e.g. "America/Chicago"
   autopostEnabled: boolean;
+  imgbbApiKey?: string; // 100% free image hosting key from api.imgbb.com
 }
 
 export enum ViewMode {
