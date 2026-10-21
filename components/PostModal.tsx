@@ -189,12 +189,16 @@ const Canvas1000: React.FC<Canvas1000Props> = ({
 
 // ── Main PostModal Component ───────────────────────────────────────────────────
 
-const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
+const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) => {
   const [selectedLayout, setSelectedLayout] = useState<LayoutType>('auto');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [vectorCandidates, setVectorCandidates] = useState<string[]>([]);
   const [imageLoading, setImageLoading] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [isQueueing, setIsQueueing] = useState(false);
+  const [queueSuccess, setQueueSuccess] = useState(false);
+  const [isPostingNow, setIsPostingNow] = useState(false);
+  const [postNowStatus, setPostNowStatus] = useState<string | null>(null);
   
   // Editable fields
   const [contextText, setContextText] = useState('');
@@ -204,6 +208,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
 
   const exportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Sync state when post changes
   useEffect(() => {
@@ -289,11 +294,6 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose }) => {
     };
     reader.readAsDataURL(file);
   };
-
-  const [isQueueing, setIsQueueing] = useState(false);
-  const [queueSuccess, setQueueSuccess] = useState(false);
-  const [isPostingNow, setIsPostingNow] = useState(false);
-  const [postNowStatus, setPostNowStatus] = useState<string | null>(null);
 
   const generateCardDataUrl = async (): Promise<string> => {
     if (!exportRef.current) throw new Error("No canvas element");
