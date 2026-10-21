@@ -1,0 +1,147 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: /users/{userId}/posts/{postId}
+// Document ID: {postId} (matches post id)
+//
+// Fields:
+//   - id: string (required, non-empty, max 128 chars, matches {postId}, immutable) - Unique post identifier
+//   - visual_text: string (required, non-empty, max 2000 chars) - Question / visual text content
+//   - read_more_content: string (required, max 10000 chars) - Long-form explanation and background
+//   - answer: string (required, non-empty, max 2000 chars) - Solution / answer text
+//   - category: string (required, non-empty, max 100 chars) - Category name
+//   - style_hint: string (required, max 500 chars) - Visual styling guidance
+//   - image_keyword: string (required, max 100 chars) - Search keyword for vector illustration
+//   - text_length: string (required, allowed: 'short', 'medium', 'long') - Display format
+//   - timestamp: number (required, positive integer/float in ms) - Creation time
+//   - status: string (required, allowed: 'active', 'archived') - Post visibility/status
+//   - userId: string (required, matches request.auth.uid and path {userId}, immutable) - Creator's UID
+//   - imageUrl: string (optional, max 2048 chars) - Cached illustration URL
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------------------------------------------------------------
+    // Helper Functions
+    // ---------------------------------------------------------------
+
+    // Check if the request is from an authenticated user
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Check if the authenticated user owns the resource path
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // Validate that all required fields exist on the incoming payload
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    // Validate that only defined fields exist on the incoming payload
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    // Validate that specified immutable fields remain unchanged during update
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // ---------------------------------------------------------------
+    // Domain Validator: QuizPost
+    // ---------------------------------------------------------------
+
+    function isValidQuizPost(data, userId, postId) {
+      let requiredFields = [
+        'id', 'visual_text', 'read_more_content', 'answer',
+        'category', 'style_hint', 'image_keyword', 'text_length',
+        'timestamp', 'status', 'userId'
+      ];
+      let allowedFields = [
+        'id', 'visual_text', 'read_more_content', 'answer',
+        'category', 'style_hint', 'image_keyword', 'text_length',
+        'timestamp', 'status', 'userId', 'imageUrl'
+      ];
+
+      return hasRequiredFields(requiredFields) &&
+        hasOnlyAllowedFields(allowedFields) &&
+        // id validation (must match document ID and be a valid string)
+        data.id is string &&
+        data.id == postId &&
+        data.id.size() > 0 &&
+        data.id.size() <= 128 &&
+        // visual_text validation (must be non-empty string)
+        data.visual_text is string &&
+        data.visual_text.size() > 0 &&
+        data.visual_text.size() <= 2000 &&
+        // read_more_content validation
+        data.read_more_content is string &&
+        data.read_more_content.size() <= 10000 &&
+        // answer validation (must be non-empty string)
+        data.answer is string &&
+        data.answer.size() > 0 &&
+        data.answer.size() <= 2000 &&
+        // category validation (must be non-empty string)
+        data.category is string &&
+        data.category.size() > 0 &&
+        data.category.size() <= 100 &&
+        // style_hint validation
+        data.style_hint is string &&
+        data.style_hint.size() <= 500 &&
+        // image_keyword validation
+        data.image_keyword is string &&
+        data.image_keyword.size() <= 100 &&
+        // text_length validation
+        data.text_length is string &&
+        data.text_length in ['short', 'medium', 'long'] &&
+        // timestamp validation
+        data.timestamp is number &&
+        data.timestamp > 0 &&
+        // status validation
+        data.status is string &&
+        data.status in ['active', 'archived'] &&
+        // userId validation (must match authenticated UID and path parameter)
+        data.userId is string &&
+        data.userId == request.auth.uid &&
+        data.userId == userId &&
+        // optional imageUrl validation
+        (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 2048));
+    }
+
+    // ---------------------------------------------------------------
+    // Subcollection: /users/{userId}/posts/{postId}
+    // ---------------------------------------------------------------
+
+    match /users/{userId}/posts/{postId} {
+      // Authenticated owners can read (get & list) their own posts
+      allow read: if isOwner(userId);
+
+      // Authenticated owners can create their own posts with valid schema
+      allow create: if isOwner(userId) &&
+        isValidQuizPost(request.resource.data, userId, postId);
+
+      // Authenticated owners can update their own posts with valid schema and preserved immutable fields
+      allow update: if isOwner(userId) &&
+        isValidQuizPost(request.resource.data, userId, postId) &&
+        areImmutableFieldsUnchanged(['id', 'userId']);
+
+      // Authenticated owners can delete their own posts
+      allow delete: if isOwner(userId);
+    }
+
+    // ---------------------------------------------------------------
+    // Default Deny: All other collections and paths are closed
+    // ---------------------------------------------------------------
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

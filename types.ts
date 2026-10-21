@@ -29,6 +29,8 @@ export interface QuizPost {
   imageUrl?: string;
   timestamp: number;
   status: 'active' | 'archived';
+  /** Firebase Auth User ID who created this post */
+  userId?: string;
 }
 
 export enum ViewMode {

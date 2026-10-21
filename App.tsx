@@ -3,7 +3,7 @@ import {
   Flame, Menu, X, AlertCircle, TrendingUp, 
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
   Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
-  Settings as SettingsIcon, Image as ImageIcon
+  Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon
 } from 'lucide-react';
 import { QuizPost, Category, ViewMode } from './types';
 import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
@@ -11,9 +11,18 @@ import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
 import PostModal from './components/PostModal';
 import SettingsModal from './components/SettingsModal';
+import { auth, loginWithGoogle, logoutUser, onAuthStateChanged, User } from './services/firebase';
+import { 
+  subscribeToUserPosts, 
+  saveUserPosts, 
+  deleteUserPost, 
+  updateUserPost 
+} from './services/firestoreService';
 import * as db from './services/dbService';
 
 const App: React.FC = () => {
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [authLoading, setAuthLoading] = useState(true);
   const [allPosts, setAllPosts] = useState<QuizPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +36,53 @@ const App: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // 1. Listen to Firebase Auth state
+  useEffect(() => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setCurrentUser(user);
+      setAuthLoading(false);
+    });
+    return () => unsubscribeAuth();
+  }, []);
+
+  // 2. Real-time Cloud Firestore synchronization when user is logged in
+  useEffect(() => {
+    if (!currentUser) {
+      setAllPosts([]);
+      return;
+    }
+
+    setLoading(true);
+    const unsubscribePosts = subscribeToUserPosts(
+      currentUser.uid,
+      async (cloudPosts) => {
+        // If Firestore is empty, check if we have local IndexedDB posts to migrate
+        if (cloudPosts.length === 0) {
+          try {
+            const localPosts = await db.getAllPosts();
+            if (localPosts.length > 0) {
+              const postsToMigrate = localPosts.map(p => ({ ...p, userId: currentUser.uid }));
+              await saveUserPosts(currentUser.uid, postsToMigrate);
+              setSuccessMsg(`Migrated ${localPosts.length} posts to your cloud account.`);
+              return;
+            }
+          } catch (e) {
+            console.warn("Local migration check:", e);
+          }
+        }
+        setAllPosts(cloudPosts);
+        setLoading(false);
+      },
+      (err) => {
+        console.error("Firestore error:", err);
+        setError("Cloud sync failed. Make sure your Firestore rules are published.");
+        setLoading(false);
+      }
+    );
+
+    return () => unsubscribePosts();
+  }, [currentUser]);
 
   // Semantic similarity checker to prevent rephrased identical puzzles
   const arePuzzlesSimilar = (text1: string, text2: string): boolean => {
@@ -47,43 +103,8 @@ const App: React.FC = () => {
       if (k2.has(w)) matches++;
     }
     const similarity = matches / Math.min(k1.size, k2.size);
-    return similarity >= 0.55; // 55% keyword overlap = duplicate riddle
+    return similarity >= 0.55;
   };
-
-  // Initial DB Load with Auto-Deduplication
-  useEffect(() => {
-    const loadFromDB = async () => {
-      try {
-        const stored = await db.getAllPosts();
-        
-        // Clean out any duplicates sitting in the user's database
-        const uniqueStored: QuizPost[] = [];
-        const duplicateIdsToDelete: string[] = [];
-
-        for (const post of stored) {
-          const isDupe = uniqueStored.some(existing => arePuzzlesSimilar(existing.visual_text, post.visual_text));
-          if (isDupe) {
-            duplicateIdsToDelete.push(post.id);
-          } else {
-            uniqueStored.push(post);
-          }
-        }
-
-        // Delete duplicates from IndexedDB
-        for (const id of duplicateIdsToDelete) {
-          await db.deletePostFromDB(id);
-        }
-
-        setAllPosts(uniqueStored);
-        if (uniqueStored.length === 0) {
-          handleLoadMore();
-        }
-      } catch (err) {
-        console.error("DB Load Error", err);
-      }
-    };
-    loadFromDB();
-  }, []);
 
   // Show auto-fading success messages
   useEffect(() => {
@@ -93,11 +114,35 @@ const App: React.FC = () => {
     }
   }, [successMsg]);
 
+  const handleSignIn = async () => {
+    setError(null);
+    try {
+      await loginWithGoogle();
+      setSuccessMsg("Signed in successfully. Syncing your posts...");
+    } catch (err: any) {
+      console.error("Login error:", err);
+      setError(err?.message || "Google sign-in failed.");
+    }
+  };
+
+  const handleSignOut = async () => {
+    try {
+      await logoutUser();
+      setSuccessMsg("Signed out.");
+    } catch (err: any) {
+      setError("Sign out failed.");
+    }
+  };
+
   const handleLoadMore = async () => {
+    if (!currentUser) {
+      setError("Please sign in with Google to generate and save posts to your account.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
     try {
-      // Build a list of recent titles and topics to forbid in the prompt
       const recentTitles = allPosts
         .slice(-30)
         .map(p => p.visual_text.split('|')[0].trim())
@@ -109,18 +154,22 @@ const App: React.FC = () => {
 
       const newPosts = await fetchQuizPosts(prompt);
 
-      // Semantic deduplication: reject if similar to ANY existing post
+      // Semantic deduplication
       const uniquePosts = newPosts.filter(newP => {
         const isDupe = allPosts.some(existing => arePuzzlesSimilar(existing.visual_text, newP.visual_text));
         return !isDupe;
       });
 
-      const postsToSave = uniquePosts.map(p => ({ ...p, timestamp: Date.now(), status: 'active' as const }));
+      const postsToSave: QuizPost[] = uniquePosts.map(p => ({ 
+        ...p, 
+        timestamp: Date.now(), 
+        status: 'active' as const,
+        userId: currentUser.uid,
+      }));
 
       if (postsToSave.length > 0) {
-        await db.savePosts(postsToSave);
-        setAllPosts(prev => [...prev, ...postsToSave]);
-        setSuccessMsg(`Generated ${postsToSave.length} new unique posts (filtered repeats).`);
+        await saveUserPosts(currentUser.uid, postsToSave);
+        setSuccessMsg(`Generated ${postsToSave.length} new posts synced to your account.`);
       } else {
         setSuccessMsg("Filtered repeats. Generating fresh topics...");
       }
@@ -133,23 +182,23 @@ const App: React.FC = () => {
   };
 
   const deletePost = async (id: string) => {
+    if (!currentUser) return;
     try {
-      await db.deletePostFromDB(id);
-      setAllPosts(prev => prev.filter(p => p.id !== id));
+      await deleteUserPost(currentUser.uid, id);
       setSuccessMsg("Post deleted.");
     } catch (err) {
-      setError("Failed to delete post from database.");
+      setError("Failed to delete post from cloud.");
     }
   };
 
   const toggleArchive = async (post: QuizPost) => {
+    if (!currentUser) return;
     const updatedPost: QuizPost = { 
       ...post, 
       status: post.status === 'active' ? 'archived' : 'active' 
     };
     try {
-      await db.savePosts([updatedPost]);
-      setAllPosts(prev => prev.map(p => p.id === post.id ? updatedPost : p));
+      await updateUserPost(currentUser.uid, updatedPost);
       setSuccessMsg(updatedPost.status === 'archived' ? 'Post archived.' : 'Post restored to feed.');
     } catch (err) {
       setError("Failed to update post status.");
@@ -158,7 +207,7 @@ const App: React.FC = () => {
 
   const handleExport = async () => {
     try {
-      const data = await db.exportDatabase();
+      const data = JSON.stringify(allPosts, null, 2);
       const blob = new Blob([data], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -173,15 +222,17 @@ const App: React.FC = () => {
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !currentUser) return;
     const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         const content = event.target?.result as string;
-        await db.importDatabase(content);
-        const updated = await db.getAllPosts();
-        setAllPosts(updated);
-        setSuccessMsg("Database restored successfully.");
+        const parsed = JSON.parse(content) as QuizPost[];
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const withUser = parsed.map(p => ({ ...p, userId: currentUser.uid }));
+          await saveUserPosts(currentUser.uid, withUser);
+          setSuccessMsg(`Imported ${parsed.length} posts to your cloud account.`);
+        }
       } catch (err) {
         setError("Invalid backup file.");
       }
@@ -217,17 +268,25 @@ const App: React.FC = () => {
   const handleCustomGenerate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!customPrompt.trim()) return;
+    if (!currentUser) {
+      setError("Please sign in with Google to create custom posts.");
+      return;
+    }
     setIsGeneratingCustom(true);
     setError(null);
     try {
       const post = await generateCustomEnigma(customPrompt);
-      const postWithMeta: QuizPost = { ...post, timestamp: Date.now(), status: 'active' };
-      await db.savePosts([postWithMeta]);
-      setAllPosts(prev => [postWithMeta, ...prev]);
+      const postWithMeta: QuizPost = { 
+        ...post, 
+        timestamp: Date.now(), 
+        status: 'active',
+        userId: currentUser.uid,
+      };
+      await saveUserPosts(currentUser.uid, [postWithMeta]);
       setSelectedPost(postWithMeta);
       setCustomPrompt('');
       setViewMode(ViewMode.Today);
-      setSuccessMsg("Custom post generated successfully.");
+      setSuccessMsg("Custom post generated and saved to your cloud.");
     } catch (err: any) {
       setError(err?.message || 'Generation failed. Check your API key in Settings.');
     } finally {
@@ -245,12 +304,22 @@ const App: React.FC = () => {
           <div className="px-2 py-1 bg-[#0477CF] text-white rounded font-black text-xs tracking-tighter">DQ&R</div>
           <h1 className="text-lg font-bold font-heading text-white">{viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Viral Feed")}</h1>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-zinc-400 hover:text-white"><SettingsIcon size={20} /></button>
+        <div className="flex items-center gap-1.5">
+          {currentUser ? (
+            <button onClick={handleSignOut} className="p-1.5 text-zinc-400 hover:text-white rounded-lg text-xs flex items-center gap-1" title="Sign Out">
+              <LogOut size={16} />
+            </button>
+          ) : (
+            <button onClick={handleSignIn} className="px-2.5 py-1 bg-[#0477CF] text-white rounded-lg text-xs font-bold flex items-center gap-1">
+              <LogIn size={13} /> Sign In
+            </button>
+          )}
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 text-zinc-400 hover:text-white"><SettingsIcon size={18} /></button>
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-zinc-400 hover:text-white"><Menu size={22} /></button>
         </div>
       </div>
 
+      {/* Sidebar */}
       <aside 
         className={`fixed top-0 left-0 bottom-0 z-50 w-full md:w-80 h-screen md:h-auto md:relative flex flex-col bg-[#09090b] border-r border-zinc-800 transition-transform duration-300 ease-in-out ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'}`}
       >
@@ -262,7 +331,7 @@ const App: React.FC = () => {
           <button onClick={() => setIsSidebarOpen(false)} className="p-2 text-zinc-500 hover:text-white"><X size={24} /></button>
         </div>
 
-        <div className="hidden md:flex items-center justify-between p-8 border-b border-zinc-900 shrink-0">
+        <div className="hidden md:flex items-center justify-between p-7 border-b border-zinc-900 shrink-0">
           <div className="flex items-center gap-3">
             <div className="px-3 py-1 bg-[#0477CF] text-white rounded-lg font-black text-xl tracking-tighter">DQ&R</div>
             <h1 className="text-xl font-black font-heading tracking-tight leading-tight text-white">Daily Quiz <br/><span className="text-zinc-500 font-light">& Riddles</span></h1>
@@ -274,6 +343,41 @@ const App: React.FC = () => {
           >
             <SettingsIcon size={19} />
           </button>
+        </div>
+
+        {/* User Account Bar */}
+        <div className="p-4 border-b border-zinc-900 bg-zinc-950/60">
+          {currentUser ? (
+            <div className="flex items-center justify-between gap-3 bg-zinc-900/80 p-3 rounded-2xl border border-zinc-800">
+              <div className="flex items-center gap-2.5 overflow-hidden">
+                {currentUser.photoURL ? (
+                  <img src={currentUser.photoURL} alt="" className="w-8 h-8 rounded-full border border-zinc-700 object-cover shrink-0" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-[#0477CF]/20 text-[#0477CF] flex items-center justify-center font-bold text-xs shrink-0">
+                    <UserIcon size={15} />
+                  </div>
+                )}
+                <div className="flex flex-col overflow-hidden">
+                  <span className="text-xs font-bold text-white truncate">{currentUser.displayName || 'Creator'}</span>
+                  <span className="text-[10px] text-zinc-400 truncate">{currentUser.email}</span>
+                </div>
+              </div>
+              <button 
+                onClick={handleSignOut} 
+                className="p-2 text-zinc-400 hover:text-red-400 rounded-xl hover:bg-zinc-800 transition-colors shrink-0"
+                title="Sign Out"
+              >
+                <LogOut size={16} />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={handleSignIn}
+              className="w-full py-3 px-4 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all active:scale-95"
+            >
+              <LogIn size={15} /> Sign In with Google
+            </button>
+          )}
         </div>
 
         {/* Scrolling Menu */}
@@ -301,10 +405,10 @@ const App: React.FC = () => {
           </div>
 
           <div className="pt-6 border-t border-zinc-900 space-y-1">
-            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Database size={12} /> SYSTEM</h2>
+            <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-3 flex items-center gap-2"><Database size={12} /> CLOUD & DATA</h2>
             <button onClick={() => setIsSettingsOpen(true)} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><SettingsIcon size={18} /> API & Keys Settings</button>
-            <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup Database</button>
-            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore Database</button>
+            <button onClick={handleExport} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Download size={18} /> Backup Database JSON</button>
+            <button onClick={() => fileInputRef.current?.click()} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-zinc-500 hover:text-zinc-300 transition-all font-medium"><Upload size={18} /> Restore from File</button>
           </div>
           
           <div className="h-24" aria-hidden="true" />
@@ -318,7 +422,7 @@ const App: React.FC = () => {
               {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (selectedCategory || "Quiz Feed"))}
             </h2>
             <p className="text-zinc-500 text-sm mt-1">
-              {viewMode === ViewMode.Archive ? "Manage your archived posts" : "Generate, preview & export social media posts"}
+              {currentUser ? `Synced across devices as ${currentUser.email}` : "Sign in to sync your posts across all your devices"}
             </p>
           </div>
           {viewMode !== ViewMode.Generate && viewMode !== ViewMode.Archive && (
@@ -352,16 +456,34 @@ const App: React.FC = () => {
                 <p className="font-medium text-sm">{successMsg}</p>
               </div>
             )}
+
+            {/* Unauthenticated Banner */}
+            {!currentUser && !authLoading && (
+              <div className="bg-gradient-to-r from-blue-900/30 via-zinc-900 to-zinc-900 border border-[#0477CF]/30 p-8 rounded-3xl mb-8 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div>
+                  <h3 className="text-xl font-bold text-white mb-2">Sync Your Posts Everywhere</h3>
+                  <p className="text-zinc-400 text-sm max-w-xl">
+                    Sign in with Google so your generated posts are saved to your account in the cloud. You'll be able to view, edit, and download them on your phone, laptop, or tablet without regenerating or burning extra tokens.
+                  </p>
+                </div>
+                <button
+                  onClick={handleSignIn}
+                  className="px-6 py-3.5 bg-[#0477CF] hover:bg-blue-600 text-white font-bold rounded-2xl flex items-center gap-2.5 transition-all active:scale-95 shrink-0 shadow-lg"
+                >
+                  <LogIn size={18} /> Sign In with Google
+                </button>
+              </div>
+            )}
             
             {viewMode === ViewMode.Generate ? (
               <div className="max-w-2xl mx-auto space-y-10 py-10">
                 <div className="text-center space-y-3">
                    <div className="mx-auto w-16 h-16 bg-[#0477CF]/10 rounded-3xl flex items-center justify-center text-[#0477CF] mb-4"><PlusCircle size={32} /></div>
                    <h3 className="text-3xl font-black text-white font-heading">Custom Post Creator</h3>
-                   <p className="text-zinc-500 text-sm">Specify a topic, riddle idea, or trivia question. It will be generated and saved.</p>
+                   <p className="text-zinc-500 text-sm">Specify a topic, riddle idea, or trivia question. It will be generated and saved to your cloud account.</p>
                 </div>
                 <form onSubmit={handleCustomGenerate} className="space-y-4">
-                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A riddle about torn book pages and math logic..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-base shadow-inner" />
+                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A riddle about the Grand Hotel paradox..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-base shadow-inner" />
                    <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-lg">{isGeneratingCustom ? <Loader2 className="animate-spin" /> : <Send size={18} />} GENERATE & DESIGN</button>
                 </form>
               </div>
@@ -418,11 +540,11 @@ const App: React.FC = () => {
                   })}
                 </div>
 
-                {filteredPosts.length === 0 && !loading && (
+                {filteredPosts.length === 0 && !loading && currentUser && (
                    <div className="text-center py-28 bg-zinc-900/30 rounded-3xl border border-zinc-800 border-dashed mt-6">
                       <Database className="mx-auto text-zinc-700 mb-4" size={48} />
-                      <h3 className="text-xl font-bold text-zinc-400">Database Empty</h3>
-                      <p className="text-zinc-500 text-sm mt-1 mb-6">No posts found in this section.</p>
+                      <h3 className="text-xl font-bold text-zinc-400">No Posts in Cloud Database</h3>
+                      <p className="text-zinc-500 text-sm mt-1 mb-6">Click Generate New to create your first batch of synced posts.</p>
                       <button onClick={handleLoadMore} className="bg-[#0477CF] hover:bg-blue-600 px-6 py-3 rounded-2xl text-white font-bold transition-all text-sm">Generate Initial Posts</button>
                    </div>
                 )}
