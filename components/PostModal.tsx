@@ -8,7 +8,8 @@ import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
-import { queuePostForAutopost, triggerPostNow } from '../services/socialService';
+import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig } from '../services/socialService';
+import { dispatchPostDirectly } from '../services/socialDirectService';
 import * as htmlToImage from 'html-to-image';
 
 interface PostModalProps {
@@ -343,11 +344,19 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     try {
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
-      await queuePostForAutopost(post.userId, post, storageUrl);
+      const queued = await queuePostForAutopost(post.userId, post, storageUrl);
       setPostNowStatus("Publishing to socials...");
-      const res = await triggerPostNow(post.id);
+
+      const config = getLocalSocialConfig();
+      const res = await dispatchPostDirectly(queued, config, post.userId);
       if (res.success) {
         setPostNowStatus(`✅ Posted to: ${res.platforms.join(', ')}!`);
+        onPostUpdated?.({ 
+          ...queued, 
+          scheduleStatus: 'posted', 
+          postedPlatforms: res.platforms, 
+          postedAt: Date.now() 
+        });
       } else {
         setPostNowStatus(`⚠️ Failed: ${res.errors.join(' | ')}`);
       }

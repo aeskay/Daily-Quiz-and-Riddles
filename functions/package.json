@@ -1,10 +1,11 @@
 {
   "name": "dqr-functions",
   "scripts": {
-    "build": "tsc",
-    "build:watch": "tsc --watch",
+    "build": "npx tsc",
+    "build:watch": "npx tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "autopost": "npx tsc && node lib/cli.js"
   },
   "engines": {
     "node": "20"
