@@ -283,7 +283,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                       onChange={(e) => setSocialConfig({
                         ...socialConfig,
                         buffer: {
-                          accessToken: socialConfig.buffer?.accessToken || 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT',
+                          accessToken: socialConfig.buffer?.accessToken || process.env.VITE_BUFFER_ACCESS_TOKEN || '',
                           channelId: socialConfig.buffer?.channelId || '6ada7779778b240e2f9221b8',
                           enabled: e.target.checked
                         }
@@ -299,7 +299,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     <input
                       type="password"
                       placeholder="Buffer Access Token"
-                      value={socialConfig.buffer?.accessToken ?? 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT'}
+                      value={socialConfig.buffer?.accessToken || (process.env.VITE_BUFFER_ACCESS_TOKEN || '')}
                       onChange={(e) => setSocialConfig({
                         ...socialConfig,
                         buffer: {

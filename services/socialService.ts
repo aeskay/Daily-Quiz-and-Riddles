@@ -16,9 +16,9 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     enabled: false,
   },
   meta: {
-    pageId: '104499642745480',
-    instagramAccountId: '17841471698421784',
-    accessToken: 'EAAUhtTV8puEBSxwVN5ZCHDKw4hZAfd3Fk00eE1fFBmJBu4pLjPLoVlF5vEZBIRPWlLURWwSY21btJ3VchRrhnxuvye5gOJXI8w9cpFOePQaFSBe3nE6kPOMf2nsVchUU250korktpyAsoVZAHFu9uzDmC1hGq5zsGU2170aDvezGTa6kn2Mi62ZBqjuSKa3bd25UZCTHR9riYxjDR6DvZByk5e3VSE2i4zRFi8hItCewNiEZB4WTMKUEwj1o42fq',
+    pageId: process.env.VITE_META_PAGE_ID || '104499642745480',
+    instagramAccountId: process.env.VITE_INSTAGRAM_ACCOUNT_ID || '17841471698421784',
+    accessToken: process.env.VITE_META_ACCESS_TOKEN || '',
     postToFacebook: true,
     postToInstagram: true,
   },
@@ -28,8 +28,8 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     enabled: false,
   },
   buffer: {
-    accessToken: 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT',
-    channelId: '6ada7779778b240e2f9221b8',
+    accessToken: process.env.VITE_BUFFER_ACCESS_TOKEN || '',
+    channelId: process.env.VITE_BUFFER_CHANNEL_ID || '6ada7779778b240e2f9221b8',
     enabled: true,
   },
   scheduleTimes: ["09:00", "13:00", "18:00"],
