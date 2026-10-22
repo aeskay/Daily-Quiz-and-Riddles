@@ -112,7 +112,7 @@ export async function main() {
   const isManualRun = process.env.MANUAL_RUN === "true" || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
   console.log(`Execution Mode: ${isManualRun ? "MANUAL (Immediate Dispatch)" : "CRON (Scheduled Window)"}`);
 
-  // 1. Discover all user IDs from users collection (including virtual parents) and queued posts
+  // 1. Discover all user IDs from users collection (including virtual parents)
   let userIds: string[] = [];
   try {
     const userDocs = await db.collection("users").listDocuments();
@@ -120,18 +120,6 @@ export async function main() {
   } catch (e) {
     const usersSnap = await db.collection("users").get();
     userIds = usersSnap.docs.map((d) => d.id);
-  }
-
-  try {
-    const queuedSnap = await db.collectionGroup("posts").where("scheduleStatus", "==", "queued").get();
-    for (const doc of queuedSnap.docs) {
-      const uId = doc.data()?.userId || doc.ref.parent.parent?.id;
-      if (uId && !userIds.includes(uId)) {
-        userIds.push(uId);
-      }
-    }
-  } catch (e) {
-    console.warn("CollectionGroup check note:", e);
   }
 
   console.log(`Discovered ${userIds.length} user(s): ${userIds.join(", ") || "none"}`);

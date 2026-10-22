@@ -31,18 +31,30 @@ export async function postToTwitter(
       accessSecret: creds.accessSecret,
     });
 
-    // 1. Download the rendered card image as a binary buffer
-    const imageResponse = await axios.get(imageUrl, { responseType: "arraybuffer" });
-    const imageBuffer = Buffer.from(imageResponse.data);
+    let mediaId: string | undefined;
+    try {
+      // 1. Download the rendered card image as a binary buffer
+      const imageResponse = await axios.get(imageUrl, { responseType: "arraybuffer" });
+      const imageBuffer = Buffer.from(imageResponse.data);
 
-    // 2. Upload media to Twitter v1.1 endpoint
-    const mediaId = await client.v1.uploadMedia(imageBuffer, { mimeType: "image/png" });
+      // 2. Upload media to Twitter v1.1 endpoint (requires Basic tier or media permissions)
+      mediaId = await client.v1.uploadMedia(imageBuffer, { mimeType: "image/png" });
+    } catch (mediaErr: any) {
+      console.warn("Twitter media upload note (X Free tier blocks v1.1 media upload with code 402, falling back to text tweet):", mediaErr?.message || mediaErr);
+    }
 
-    // 3. Post tweet with media attachment via Twitter v2 endpoint
-    const tweet = await client.v2.tweet({
-      text: text.slice(0, 275), // Twitter 280-char limit safety
-      media: { media_ids: [mediaId] },
-    });
+    // 3. Post tweet with media if available, or text tweet fallback
+    const tweetPayload: any = {
+      text: mediaId 
+        ? text.slice(0, 275) 
+        : text.slice(0, 275),
+    };
+
+    if (mediaId) {
+      tweetPayload.media = { media_ids: [mediaId] };
+    }
+
+    const tweet = await client.v2.tweet(tweetPayload);
 
     return {
       success: true,
