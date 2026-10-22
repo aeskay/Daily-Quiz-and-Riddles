@@ -560,7 +560,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                     onClick={handlePostNow}
                     disabled={isPostingNow}
                     className="py-3 px-4 bg-[#0477CF] hover:bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
-                    title="Immediately post to your enabled socials (Facebook/Instagram)"
+                    title="Publish to enabled socials"
                   >
                     {isPostingNow ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     Post Now
@@ -569,7 +569,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                     onClick={handleShareToTwitter}
                     type="button"
                     className="py-3 px-3.5 bg-zinc-900 hover:bg-black border border-zinc-700 hover:border-zinc-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
-                    title="Tweet directly to X (100% Free, no API credits needed)"
+                    title="Share on X"
                   >
                     𝕏 Tweet
                   </button>

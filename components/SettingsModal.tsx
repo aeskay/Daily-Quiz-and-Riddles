@@ -205,7 +205,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                 <div className="flex items-center justify-between">
                   <span className="font-bold text-sm text-white">🖼️ Image Hosting (ImgBB)</span>
                   <a href="https://api.imgbb.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
-                    Get Free Key &rarr;
+                    api.imgbb.com &rarr;
                   </a>
                 </div>
                 <input
@@ -220,10 +220,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
               {/* 1. Twitter / X via Buffer */}
               <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white">𝕏 Twitter (via Buffer)</span>
-                    <span className="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 font-bold rounded-lg">100% Free &bull; Connected</span>
-                  </div>
+                  <span className="font-bold text-sm text-white">𝕏 Twitter (via Buffer)</span>
                   <label className="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
                     <input
                       type="checkbox"
@@ -395,7 +392,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     rel="noreferrer" 
                     className="text-[11px] text-[#0477CF] hover:underline"
                   >
-                    Get free key &rarr;
+                    Documentation &rarr;
                   </a>
                 </div>
                 <input
@@ -437,7 +434,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     rel="noreferrer" 
                     className="text-[11px] text-emerald-400 hover:underline"
                   >
-                    Get free key &rarr;
+                    Documentation &rarr;
                   </a>
                 </div>
                 <input
