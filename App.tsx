@@ -669,6 +669,33 @@ const App: React.FC = () => {
                                 </div>
                               </div>
 
+                              {/* Preview of Formatted Card or Selected Graphic */}
+                              {post.renderedImageUrl ? (
+                                <div className="relative mb-4 rounded-xl overflow-hidden aspect-square border border-zinc-200/80 shadow-sm bg-zinc-50 group-hover:shadow-md transition-all">
+                                  <img 
+                                    src={post.renderedImageUrl} 
+                                    alt="Formatted Card" 
+                                    className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-[1.02]" 
+                                    loading="lazy"
+                                  />
+                                  <div className="absolute top-2 left-2 bg-black/75 backdrop-blur-md px-2 py-0.5 rounded-md text-[9px] font-bold text-white tracking-wider uppercase flex items-center gap-1 shadow-sm">
+                                    <Check size={10} className="text-emerald-400" /> READY IMAGE CARD
+                                  </div>
+                                </div>
+                              ) : post.imageUrl ? (
+                                <div className="relative mb-4 rounded-xl overflow-hidden h-36 bg-zinc-50 border border-zinc-100 flex items-center justify-center p-3">
+                                  <img 
+                                    src={post.imageUrl} 
+                                    alt="Selected Illustration" 
+                                    className="max-h-full max-w-full object-contain" 
+                                    loading="lazy"
+                                  />
+                                  <div className="absolute bottom-1.5 right-2 bg-white/90 backdrop-blur-xs px-1.5 py-0.5 rounded text-[8px] font-bold text-zinc-500 uppercase tracking-wider border border-zinc-200/50">
+                                    Graphic Attached
+                                  </div>
+                                </div>
+                              ) : null}
+
                               <div className="space-y-2">
                                 {context && (
                                   <p className="text-sm font-semibold text-[#0F4C81] line-clamp-3">
@@ -683,7 +710,7 @@ const App: React.FC = () => {
 
                             <div className="pt-4 flex items-center justify-between border-t border-zinc-100 mt-4">
                               <span className="text-[10px] font-black tracking-wider text-[#0477CF] uppercase flex items-center gap-1.5">
-                                <ImageIcon size={13} /> Design & Export
+                                <ImageIcon size={13} /> {post.renderedImageUrl ? "View / Edit Card" : "Design & Export"}
                               </span>
                               <Share2 size={14} className="text-[#0477CF] opacity-40 group-hover:opacity-100 transition-opacity" />
                             </div>

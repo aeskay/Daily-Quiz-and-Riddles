@@ -10,6 +10,7 @@ import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
 import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig } from '../services/socialService';
 import { dispatchPostDirectly } from '../services/socialDirectService';
+import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
 
 interface PostModalProps {
@@ -232,10 +233,57 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
   const fileInputRef = useRef<HTMLInputElement>(null);
 
 
-  // Sync state when post changes
+  // Helper to compile the current post state including edited text and selected image
+  const getUpdatedPost = (renderedStorageUrl?: string): QuizPost => {
+    if (!post) throw new Error("No post");
+    const newVisualText = contextText.trim() ? `${contextText.trim()} | ${questionText.trim()}` : questionText.trim();
+    return {
+      ...post,
+      visual_text: newVisualText || post.visual_text,
+      imageUrl: imageUrl || post.imageUrl || '',
+      renderedImageUrl: renderedStorageUrl || post.renderedImageUrl,
+      image_keyword: customKeyword || post.image_keyword,
+    };
+  };
+
+  const handleSelectVector = (url: string) => {
+    setImageUrl(url);
+    if (post?.userId) {
+      const updated = { ...post, imageUrl: url };
+      updateUserPost(post.userId, updated);
+      onPostUpdated?.(updated);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUrl(null);
+    setSelectedLayout('text-only');
+    if (post?.userId) {
+      const updated = { ...post, imageUrl: '' };
+      updateUserPost(post.userId, updated);
+      onPostUpdated?.(updated);
+    }
+  };
+
+  const handleClose = () => {
+    if (post?.userId) {
+      const updated = getUpdatedPost();
+      if (
+        updated.imageUrl !== post.imageUrl ||
+        updated.visual_text !== post.visual_text ||
+        updated.image_keyword !== post.image_keyword
+      ) {
+        updateUserPost(post.userId, updated);
+        onPostUpdated?.(updated);
+      }
+    }
+    onClose();
+  };
+
+  // Sync state only when the active post ID changes
   useEffect(() => {
     if (!post) return;
-    const parts = post.visual_text.split('|').map(s => s.trim());
+    const parts = (post.visual_text || '').split('|').map(s => s.trim());
     if (parts.length > 1) {
       setContextText(parts[0]);
       setQuestionText(parts[1]);
@@ -249,22 +297,36 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     setImageUrl(post.imageUrl || null);
     setVectorCandidates([]);
 
-    // Auto-fetch top vectors
+    // Auto-fetch top vectors ONLY if post doesn't already have an assigned image
     if (post.category !== 'Would you rather' && post.text_length !== 'long') {
       setImageLoading(true);
       fetchPixabayList(kw).then(list => {
         if (list.length > 0) {
           setVectorCandidates(list.slice(0, 5));
-          setImageUrl(list[0]);
-        } else {
-          // Fallback to single vector search
+          if (!post.imageUrl) {
+            const firstChoice = list[0];
+            setImageUrl(firstChoice);
+            if (post.userId) {
+              const updated = { ...post, imageUrl: firstChoice };
+              updateUserPost(post.userId, updated);
+              onPostUpdated?.(updated);
+            }
+          }
+        } else if (!post.imageUrl) {
           fetchVectorImage(kw).then(url => {
-            if (url) setImageUrl(url);
+            if (url) {
+              setImageUrl(url);
+              if (post.userId) {
+                const updated = { ...post, imageUrl: url };
+                updateUserPost(post.userId, updated);
+                onPostUpdated?.(updated);
+              }
+            }
           });
         }
       }).finally(() => setImageLoading(false));
     }
-  }, [post]);
+  }, [post?.id]);
 
   if (!post) return null;
 
@@ -288,20 +350,29 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       const list = await fetchPixabayList(customKeyword.trim());
       if (list.length > 0) {
         setVectorCandidates(list.slice(0, 5));
-        setImageUrl(list[0]);
+        const newUrl = list[0];
+        setImageUrl(newUrl);
+        if (post?.userId) {
+          const updated = { ...post, imageUrl: newUrl, image_keyword: customKeyword.trim() };
+          updateUserPost(post.userId, updated);
+          onPostUpdated?.(updated);
+        }
       } else {
         const fallback = await fetchVectorImage(customKeyword.trim());
         if (fallback) {
           setImageUrl(fallback);
           setVectorCandidates([fallback]);
+          if (post?.userId) {
+            const updated = { ...post, imageUrl: fallback, image_keyword: customKeyword.trim() };
+            updateUserPost(post.userId, updated);
+            onPostUpdated?.(updated);
+          }
         }
       }
     } finally {
       setImageLoading(false);
     }
   };
-
-
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -312,6 +383,11 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       if (result) {
         setImageUrl(result);
         setVectorCandidates(prev => [result, ...prev]);
+        if (post?.userId) {
+          const updated = { ...post, imageUrl: result };
+          updateUserPost(post.userId, updated);
+          onPostUpdated?.(updated);
+        }
       }
     };
     reader.readAsDataURL(file);
@@ -344,9 +420,10 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     try {
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
-      const updated = await queuePostForAutopost(post.userId, post, storageUrl);
+      const postToQueue = getUpdatedPost(storageUrl);
+      const queued = await queuePostForAutopost(post.userId, postToQueue, storageUrl);
       setQueueSuccess(true);
-      onPostUpdated?.(updated);
+      onPostUpdated?.(queued);
       setTimeout(() => setQueueSuccess(false), 3000);
     } catch (err: any) {
       console.error("Queue error:", err);
@@ -366,7 +443,8 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     try {
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
-      const queued = await queuePostForAutopost(post.userId, post, storageUrl);
+      const postToPost = getUpdatedPost(storageUrl);
+      const queued = await queuePostForAutopost(post.userId, postToPost, storageUrl);
       setPostNowStatus("Publishing to socials...");
 
       const config = getLocalSocialConfig();
@@ -455,7 +533,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/90 backdrop-blur-xl" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 md:p-6 bg-black/90 backdrop-blur-xl" onClick={handleClose}>
       <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
 
       <div
@@ -595,7 +673,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                 </span>
                 <h3 className="text-xl font-bold text-white font-heading mt-2">Post Editor & Vector Tools</h3>
               </div>
-              <button onClick={onClose} className="p-2 text-zinc-500 hover:text-white rounded-xl">
+              <button onClick={handleClose} className="p-2 text-zinc-500 hover:text-white rounded-xl">
                 <X size={22} />
               </button>
             </div>
@@ -608,7 +686,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                 </span>
                 {imageUrl && (
                   <button 
-                    onClick={() => { setImageUrl(null); setSelectedLayout('text-only'); }} 
+                    onClick={handleRemoveImage} 
                     className="text-[11px] text-zinc-400 hover:text-red-400 font-medium"
                   >
                     Remove Image
@@ -643,7 +721,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                     {vectorCandidates.map((url, idx) => (
                       <button
                         key={idx}
-                        onClick={() => setImageUrl(url)}
+                        onClick={() => handleSelectVector(url)}
                         className={`w-14 h-14 rounded-xl border p-1 bg-white flex items-center justify-center shrink-0 transition-all ${imageUrl === url ? 'border-[#0477CF] ring-2 ring-[#0477CF]/40' : 'border-zinc-700 opacity-60 hover:opacity-100'}`}
                       >
                         <img src={url} alt="" className="max-h-full max-w-full object-contain" />
@@ -719,7 +797,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
           </div>
 
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3.5 rounded-2xl transition-colors"
           >
             Done
