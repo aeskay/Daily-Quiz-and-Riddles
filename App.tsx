@@ -12,7 +12,8 @@ import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
 import PostModal from './components/PostModal';
 import SettingsModal from './components/SettingsModal';
-import { auth, loginWithGoogle, logoutUser, onAuthStateChanged, User } from './services/firebase';
+import { doc, setDoc } from 'firebase/firestore';
+import { auth, firestore, loginWithGoogle, logoutUser, onAuthStateChanged, User } from './services/firebase';
 import { 
   subscribeToUserPosts, 
   saveUserPosts, 
@@ -46,6 +47,18 @@ const App: React.FC = () => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setCurrentUser(user);
       setAuthLoading(false);
+      if (user) {
+        try {
+          await setDoc(doc(firestore, "users", user.uid), {
+            uid: user.uid,
+            email: user.email,
+            displayName: user.displayName,
+            lastLogin: Date.now(),
+          }, { merge: true });
+        } catch (e) {
+          console.warn("User root sync warning:", e);
+        }
+      }
     });
     return () => unsubscribeAuth();
   }, []);

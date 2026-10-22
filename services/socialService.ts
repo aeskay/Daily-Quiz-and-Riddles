@@ -84,6 +84,10 @@ export async function saveSocialConfig(userId: string | undefined, config: Socia
 
   if (userId) {
     try {
+      // Ensure the root user doc exists for collection scanners
+      const userDocRef = doc(firestore, "users", userId);
+      await setDoc(userDocRef, { uid: userId, lastUpdated: Date.now() }, { merge: true });
+
       const configDocRef = doc(firestore, "users", userId, "settings", "social");
       await setDoc(configDocRef, config, { merge: true });
     } catch (err) {

@@ -26,6 +26,7 @@ interface SocialSettings {
   scheduleTimes?: string[];
   timezone?: string;
   autopostEnabled?: boolean;
+  lastPostedAt?: number;
 }
 
 function buildCaption(post: any): string {
@@ -109,17 +110,43 @@ export async function main() {
   console.log("Checking 24/7 background autopost queue...");
   const now = new Date();
   const isManualRun = process.env.MANUAL_RUN === "true" || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
+  console.log(`Execution Mode: ${isManualRun ? "MANUAL (Immediate Dispatch)" : "CRON (Scheduled Window)"}`);
 
-  const usersSnap = await db.collection("users").get();
+  // 1. Discover all user IDs from users collection (including virtual parents) and queued posts
+  let userIds: string[] = [];
+  try {
+    const userDocs = await db.collection("users").listDocuments();
+    userIds = userDocs.map((doc) => doc.id);
+  } catch (e) {
+    const usersSnap = await db.collection("users").get();
+    userIds = usersSnap.docs.map((d) => d.id);
+  }
 
-  for (const userDoc of usersSnap.docs) {
-    const userId = userDoc.id;
+  try {
+    const queuedSnap = await db.collectionGroup("posts").where("scheduleStatus", "==", "queued").get();
+    for (const doc of queuedSnap.docs) {
+      const uId = doc.data()?.userId || doc.ref.parent.parent?.id;
+      if (uId && !userIds.includes(uId)) {
+        userIds.push(uId);
+      }
+    }
+  } catch (e) {
+    console.warn("CollectionGroup check note:", e);
+  }
+
+  console.log(`Discovered ${userIds.length} user(s): ${userIds.join(", ") || "none"}`);
+
+  for (const userId of userIds) {
+    console.log(`\n--- Checking User: ${userId} ---`);
     const settingsDoc = await db.collection("users").doc(userId).collection("settings").doc("social").get();
-    if (!settingsDoc.exists) continue;
+    if (!settingsDoc.exists) {
+      console.log(`User ${userId} has not configured social media settings in the web app.`);
+      continue;
+    }
 
     const social = settingsDoc.data() as SocialSettings;
     if (!social.autopostEnabled && !isManualRun) {
-      console.log(`Autopost paused for user ${userId}`);
+      console.log(`Autopost is currently PAUSED for user ${userId}.`);
       continue;
     }
 
@@ -135,21 +162,40 @@ export async function main() {
     const userM = Number(timeParts.find((p) => p.type === "minute")?.value || 0);
     const userTotalMinutes = userH * 60 + userM;
 
-    const scheduleTimes = social.scheduleTimes || ["09:00", "13:00", "18:00"];
+    const scheduleTimes = (social.scheduleTimes && social.scheduleTimes.length > 0)
+      ? [...social.scheduleTimes].sort()
+      : ["09:00", "13:00", "18:00"];
 
-    // Check if current user time is within +/- 15 mins of a scheduled slot
-    const isSlotActive = isManualRun || scheduleTimes.some((slot) => {
-      const [slotH, slotM] = slot.split(":").map(Number);
-      const diffMinutes = Math.abs(userTotalMinutes - (slotH * 60 + slotM));
-      return diffMinutes <= 15;
-    });
-
-    if (!isSlotActive) {
-      console.log(`User ${userId} local time (${userH}:${userM} in ${userTz}) is not within a scheduled slot.`);
-      continue;
+    // Identify the latest scheduled slot that has arrived today in user's timezone
+    let activeSlot: string | null = null;
+    let activeSlotMinutes = 0;
+    for (const slot of scheduleTimes) {
+      const [sH, sM] = slot.split(":").map(Number);
+      const slotMin = sH * 60 + sM;
+      if (userTotalMinutes >= slotMin) {
+        activeSlot = slot;
+        activeSlotMinutes = slotMin;
+      }
     }
 
-    // Find all queued posts (sort in memory to avoid Firestore index requirements)
+    if (!isManualRun) {
+      if (!activeSlot) {
+        console.log(`User ${userId}: No scheduled slot has arrived yet today (current time: ${userH}:${String(userM).padStart(2, "0")} in ${userTz}). Next slot: ${scheduleTimes[0]}.`);
+        continue;
+      }
+
+      // Check if a post was already made since this slot started today
+      const lastPostedAt = social.lastPostedAt || 0;
+      const minutesSinceSlot = userTotalMinutes - activeSlotMinutes;
+      const slotEpoch = now.getTime() - (minutesSinceSlot * 60 * 1000);
+
+      if (lastPostedAt >= slotEpoch - 60000) {
+        console.log(`User ${userId}: Already posted for slot ${activeSlot} today (last posted at ${new Date(lastPostedAt).toLocaleTimeString()}).`);
+        continue;
+      }
+    }
+
+    // Find all queued posts
     const postsSnap = await db
       .collection("users")
       .doc(userId)
@@ -162,6 +208,8 @@ export async function main() {
       continue;
     }
 
+    console.log(`User ${userId} has ${postsSnap.docs.length} post(s) queued for publishing.`);
+
     // Sort earliest post first
     const sortedDocs = postsSnap.docs.sort((a, b) => {
       const tA = a.data().timestamp || 0;
@@ -172,9 +220,13 @@ export async function main() {
     const nextPostDoc = sortedDocs[0];
     const nextPost = nextPostDoc.data();
 
-    console.log(`Publishing post ${nextPostDoc.id} for user ${userId}...`);
+    console.log(`Publishing post ${nextPostDoc.id} for user ${userId} (slot: ${activeSlot || "manual"})...`);
     const result = await dispatchPostToSocials(nextPostDoc.ref, nextPost, social);
     console.log(`Result:`, result);
+
+    if (result.success) {
+      await settingsDoc.ref.set({ lastPostedAt: Date.now() }, { merge: true });
+    }
   }
 }
 

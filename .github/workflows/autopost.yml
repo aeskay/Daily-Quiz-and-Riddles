@@ -21,8 +21,13 @@ jobs:
         working-directory: ./functions
         run: npm install
 
+      - name: Build TypeScript
+        working-directory: ./functions
+        run: npm run build
+
       - name: Run Autopost Engine
         working-directory: ./functions
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-        run: npm run autopost
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: node lib/cli.js

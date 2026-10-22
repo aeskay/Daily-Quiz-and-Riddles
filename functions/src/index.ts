@@ -15,6 +15,7 @@ interface SocialSettings {
   scheduleTimes?: string[]; // e.g. ["09:00", "13:00", "18:00"]
   timezone?: string;
   autopostEnabled?: boolean;
+  lastPostedAt?: number;
 }
 
 /**
@@ -126,37 +127,66 @@ export const autoPostScheduler = onSchedule(
       const social = settingsDoc.data() as SocialSettings;
       if (!social.autopostEnabled) continue;
 
-      const scheduleTimes = social.scheduleTimes || ["09:00", "13:00", "18:00"];
+      const userTz = social.timezone || "America/Chicago";
+      const timeParts = new Intl.DateTimeFormat("en-US", {
+        timeZone: userTz,
+        hour: "numeric",
+        minute: "numeric",
+        hour12: false,
+      }).formatToParts(now);
 
-      // Check if current time is within +/- 15 mins of a scheduled slot
-      const isSlotActive = scheduleTimes.some((slot) => {
-        const [slotH, slotM] = slot.split(":").map(Number);
-        const diffMinutes = Math.abs((now.getHours() * 60 + currentMinutes) - (slotH * 60 + slotM));
-        return diffMinutes <= 15;
-      });
+      const userH = Number(timeParts.find((p) => p.type === "hour")?.value || 0);
+      const userM = Number(timeParts.find((p) => p.type === "minute")?.value || 0);
+      const userTotalMinutes = userH * 60 + userM;
 
-      if (!isSlotActive) continue;
+      const scheduleTimes = (social.scheduleTimes && social.scheduleTimes.length > 0)
+        ? [...social.scheduleTimes].sort()
+        : ["09:00", "13:00", "18:00"];
 
-      // Find the next queued post
+      // Find the latest slot that has arrived today in user's timezone
+      let activeSlot: string | null = null;
+      let activeSlotMinutes = 0;
+      for (const slot of scheduleTimes) {
+        const [sH, sM] = slot.split(":").map(Number);
+        const slotMin = sH * 60 + sM;
+        if (userTotalMinutes >= slotMin) {
+          activeSlot = slot;
+          activeSlotMinutes = slotMin;
+        }
+      }
+
+      if (!activeSlot) continue;
+
+      const lastPostedAt = social.lastPostedAt || 0;
+      const minutesSinceSlot = userTotalMinutes - activeSlotMinutes;
+      const slotEpoch = now.getTime() - (minutesSinceSlot * 60 * 1000);
+
+      if (lastPostedAt >= slotEpoch - 60000) continue;
+
+      // Find all queued posts
       const postsSnap = await db
         .collection("users")
         .doc(userId)
         .collection("posts")
         .where("scheduleStatus", "==", "queued")
-        .orderBy("timestamp", "asc")
-        .limit(1)
         .get();
 
-      if (postsSnap.empty) {
-        console.log(`User ${userId} has no queued posts ready to publish.`);
-        continue;
-      }
+      if (postsSnap.empty) continue;
 
-      const nextPostDoc = postsSnap.docs[0];
+      const sortedDocs = postsSnap.docs.sort((a, b) => {
+        const tA = a.data().timestamp || 0;
+        const tB = b.data().timestamp || 0;
+        return tA - tB;
+      });
+
+      const nextPostDoc = sortedDocs[0];
       const nextPost = nextPostDoc.data();
 
       console.log(`Publishing post ${nextPostDoc.id} for user ${userId}...`);
-      await dispatchPostToSocials(nextPostDoc.ref, nextPost, social);
+      const res = await dispatchPostToSocials(nextPostDoc.ref, nextPost, social);
+      if (res.success) {
+        await settingsDoc.ref.set({ lastPostedAt: Date.now() }, { merge: true });
+      }
     }
   }
 );
