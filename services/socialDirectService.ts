@@ -31,6 +31,7 @@ export async function directPostToFacebook(
     formData.append('url', imageUrl);
     formData.append('caption', caption);
     formData.append('access_token', accessToken);
+    formData.append('published', 'true');
 
     const res = await fetch(url, {
       method: 'POST',

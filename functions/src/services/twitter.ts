@@ -55,6 +55,8 @@ export async function postToTwitter(
     }
 
     const tweet = await client.v2.tweet(tweetPayload);
+    console.log(`[Twitter] Tweet posted successfully! Tweet ID: ${tweet.data.id}`);
+    console.log(`[Twitter] Direct Tweet Link: https://twitter.com/i/web/status/${tweet.data.id}`);
 
     return {
       success: true,

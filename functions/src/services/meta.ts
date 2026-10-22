@@ -25,12 +25,17 @@ export async function postToFacebook(
         url: imageUrl,
         caption: caption,
         access_token: creds.accessToken,
+        published: true,
       },
     });
 
+    const publishedId = response.data.post_id || response.data.id;
+    console.log(`[Facebook] Published successfully to Page ID: ${creds.pageId}`);
+    console.log(`[Facebook] Direct Post Link: https://www.facebook.com/${publishedId}`);
+
     return {
       success: true,
-      postId: response.data.id,
+      postId: publishedId,
     };
   } catch (err: any) {
     const errorMsg = err?.response?.data?.error?.message || err?.message || "Failed to publish to Facebook";
