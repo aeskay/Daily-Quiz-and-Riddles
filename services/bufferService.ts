@@ -5,6 +5,7 @@ export async function postToBuffer(
   accessToken: string,
   channelId: string,
   text: string,
+  imageUrl?: string,
   mode: 'shareNow' | 'addToQueue' = 'shareNow'
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
@@ -35,6 +36,23 @@ export async function postToBuffer(
       ? (window.location.hostname.includes('netlify.app') ? '/.netlify/functions/buffer' : '/api/buffer/graphql')
       : 'https://api.buffer.com/graphql';
 
+    const input: any = {
+      channelId: channelId.trim(),
+      text,
+      schedulingType: 'automatic',
+      mode,
+    };
+
+    if (imageUrl && imageUrl.startsWith('http')) {
+      input.assets = [
+        {
+          image: {
+            url: imageUrl,
+          },
+        },
+      ];
+    }
+
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -43,14 +61,7 @@ export async function postToBuffer(
       },
       body: JSON.stringify({
         query: mutation,
-        variables: {
-          input: {
-            channelId: channelId.trim(),
-            text,
-            schedulingType: 'automatic',
-            mode,
-          },
-        },
+        variables: { input },
       }),
     });
 

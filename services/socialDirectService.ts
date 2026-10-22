@@ -189,6 +189,7 @@ export async function dispatchPostDirectly(
       social.buffer.accessToken,
       channelId,
       caption,
+      publicHttpsUrl,
       'shareNow'
     );
     if (bufferRes.success) {
@@ -242,7 +243,7 @@ export interface SocialTestResult {
  */
 export async function testAllSocialIntegrations(social: SocialConfig): Promise<SocialTestResult[]> {
   const results: SocialTestResult[] = [];
-  const testCaption = `🧠 DAILY QUIZ & RIDDLES\n\nLive Pipeline Test — Facebook, Instagram & X/Twitter verified working!\n\n👇 Drop your guess in the comments!`;
+  const testCaption = `🧠 DAILY QUIZ & RIDDLES\n\nI speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?\n\n👇 Drop your guess in the comments!`;
   
   // Use our proven high-res Meta image
   let cdnUrl = 'https://scontent-dfw5-2.xx.fbcdn.net/v/t39.30808-6/365467817_114353981749580_8926697481991324250_n.png?_nc_cat=104&ccb=1-7&_nc_sid=585619&_nc_ohc=pEo2ALjso2AQ7kNvwG4aQBi&_nc_oc=AdoWLgnf8ztlvUWPNlXyMdlikUBRcexaiW9oY0aMtL4vC1egl1fUeU9jXFTbje71SiY&_nc_zt=23&_nc_ht=scontent-dfw5-2.xx&edm=AId9v20EAAAA&_nc_gid=SjAXKmiQTnB6qRqCtVhiSg&_nc_tpa=Q5bMBQLYbPa-AFpguGRIUH_AvaH4AFtQ_nweV-F9u1h2R_g09VmMnXqVY24x07CXE_zRn_uehJOVyKIheA&oh=00_AQOYLei3aPw2csbgKv2MIUfLmqkKWmBidebD-HCZ1HlaXQ&oe=6AE0694C';
@@ -287,7 +288,7 @@ export async function testAllSocialIntegrations(social: SocialConfig): Promise<S
   // 3. Twitter / X via Buffer Test
   if (social.buffer?.enabled && social.buffer?.accessToken) {
     const channelId = social.buffer.channelId || '6ada7779778b240e2f9221b8';
-    const bufRes = await postToBuffer(social.buffer.accessToken, channelId, testCaption, 'shareNow');
+    const bufRes = await postToBuffer(social.buffer.accessToken, channelId, testCaption, cdnUrl, 'shareNow');
     results.push({
       platform: 'buffer',
       name: 'Twitter / X (@quiz_riddles via Buffer)',
