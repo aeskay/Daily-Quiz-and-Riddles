@@ -40,6 +40,7 @@ export interface QuizPost {
   postedAt?: number;
   postedPlatforms?: string[];
   postError?: string;
+  source?: 'ai' | 'human_web' | 'community';
 }
 
 export interface SocialConfig {
@@ -60,6 +61,11 @@ export interface SocialConfig {
   tiktok: {
     accessToken: string;
     openId: string;
+    enabled: boolean;
+  };
+  buffer?: {
+    accessToken: string;
+    channelId: string;
     enabled: boolean;
   };
   scheduleTimes: string[]; // e.g. ["09:00", "13:00", "18:00"]

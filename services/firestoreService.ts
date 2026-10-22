@@ -52,6 +52,20 @@ export function subscribeToUserPosts(
 }
 
 /**
+ * Removes undefined fields from an object so Firestore setDoc/updateDoc never throws:
+ * "Unsupported field value: undefined"
+ */
+function sanitizeForFirestore<T extends Record<string, any>>(obj: T): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const [key, val] of Object.entries(obj)) {
+    if (val !== undefined) {
+      clean[key] = val;
+    }
+  }
+  return clean;
+}
+
+/**
  * Saves one or more posts into the user's Firestore subcollection
  */
 export async function saveUserPosts(userId: string, posts: QuizPost[]): Promise<void> {
@@ -61,10 +75,10 @@ export async function saveUserPosts(userId: string, posts: QuizPost[]): Promise<
   const postsCol = getUserPostsRef(userId);
 
   for (const post of posts) {
-    const postWithUser = {
+    const postWithUser = sanitizeForFirestore({
       ...post,
       userId,
-    };
+    });
     const postDoc = doc(postsCol, post.id);
     batch.set(postDoc, postWithUser);
   }
@@ -78,7 +92,8 @@ export async function saveUserPosts(userId: string, posts: QuizPost[]): Promise<
 export async function updateUserPost(userId: string, post: QuizPost): Promise<void> {
   if (!userId || !post.id) return;
   const postDoc = doc(getUserPostsRef(userId), post.id);
-  await setDoc(postDoc, { ...post, userId }, { merge: true });
+  const cleanData = sanitizeForFirestore({ ...post, userId });
+  await setDoc(postDoc, cleanData, { merge: true });
 }
 
 /**

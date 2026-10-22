@@ -2,6 +2,7 @@ import * as admin from "firebase-admin";
 import { postToTwitter, TwitterCredentials } from "./services/twitter";
 import { postToFacebook, postToInstagram, MetaCredentials } from "./services/meta";
 import { postToTikTok, TikTokCredentials } from "./services/tiktok";
+import { postToBuffer, BufferCredentials } from "./services/buffer";
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
@@ -21,6 +22,7 @@ const db = admin.firestore();
 
 interface SocialSettings {
   twitter?: TwitterCredentials & { enabled: boolean };
+  buffer?: BufferCredentials & { enabled: boolean };
   meta?: MetaCredentials & { postToFacebook: boolean; postToInstagram: boolean };
   tiktok?: TikTokCredentials & { enabled: boolean };
   scheduleTimes?: string[];
@@ -55,8 +57,19 @@ async function dispatchPostToSocials(
   const platforms: string[] = [];
   const errors: string[] = [];
 
-  // 1. Post to Twitter / X
-  if (social.twitter?.enabled && social.twitter.apiKey) {
+  // 1. Post to Twitter / X (via Buffer if enabled, or direct)
+  if (social.buffer?.enabled && social.buffer.accessToken) {
+    const creds = {
+      accessToken: social.buffer.accessToken,
+      channelId: social.buffer.channelId || "6ada7779778b240e2f9221b8",
+    };
+    const res = await postToBuffer(creds, caption);
+    if (res.success) {
+      platforms.push("twitter (via Buffer)");
+    } else if (res.error) {
+      errors.push(`Twitter (Buffer): ${res.error}`);
+    }
+  } else if (social.twitter?.enabled && social.twitter.apiKey) {
     const res = await postToTwitter(social.twitter, caption, imageUrl);
     if (res.success) {
       platforms.push("twitter");

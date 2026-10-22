@@ -79,6 +79,7 @@ function assignId(item: any, index = 0): QuizPost {
     id: `${Date.now()}-${index}-${Math.random().toString(36).substr(2, 9)}`,
     timestamp: Date.now(),
     status: 'active',
+    source: 'ai',
   };
 }
 
@@ -191,7 +192,10 @@ export const Prompts = {
       ? `\n\nALREADY GENERATED — do NOT repeat or rephrase these:\n${recentTitles.map(t => `- ${t}`).join('\n')}`
       : '';
     const seed = Math.floor(Math.random() * 1000000);
-    return `Generate 8 diverse quiz and riddle posts. Mix categories: include at least one Logic & Math, one Riddle, one General Knowledge, one Science & Tech, and one Would You Rather. Each must use a completely different topic and logic mechanism. [Seed: ${seed}]${avoidClause}`;
+    return `Generate 8 viral, fast-scrolling TikTok & Reels style quiz and riddle posts.
+ZERO school homework or exam questions (NEVER Ohm's law, NEVER physics formulas, NEVER gold foil experiments, NEVER dry textbook history).
+Focus on: brain-glitch trick questions (e.g. "If you pass the person in 2nd place..."), viral math disputes (e.g. "5 + 5 × 5 - 5 = ?"), mind-blowing "did you know" wonders (pink hippo milk, Mars blue sunsets, Sudan having more pyramids than Egypt), and clever wordplay riddles.
+Mix categories: at least one Logic & Math, one true Riddle, one fun General Knowledge, one Science & Tech wonder, and one polarizing Would You Rather dilemma. [Seed: ${seed}]${avoidClause}`;
   },
 
   getCategory: (category: Category, recentTitles: string[] = []) => {
@@ -199,6 +203,26 @@ export const Prompts = {
       ? `\n\nALREADY GENERATED — do NOT repeat or rephrase these:\n${recentTitles.map(t => `- ${t}`).join('\n')}`
       : '';
     const seed = Math.floor(Math.random() * 1000000);
-    return `Generate 8 posts for the "${category}" category. Each must cover a completely different topic — no two should feel similar. [Seed: ${seed}]${avoidClause}`;
+
+    let categoryGuidance = 'Ensure questions are addictive, fast-paced, and spark massive comment debates.';
+    if (category === Category.Riddles) {
+      categoryGuidance = 'MANDATORY: Every post MUST be an authentic riddle or brain-glitch trick question (e.g. "If you overtake 2nd place...", "What do cows drink?"). Absolutely NO physics, chemistry, or textbook definitions!';
+    } else if (category === Category.GeneralKnowledge) {
+      categoryGuidance = 'MANDATORY: Mind-blowing viral trivia that makes people say "NO WAY!" (e.g. ketchup sold as medicine, Sudan having more pyramids than Egypt, chocolate records). ZERO high school history exams or dry dates!';
+    } else if (category === Category.LogicMath) {
+      categoryGuidance = 'MANDATORY: Viral order-of-operation traps (e.g. 5 + 5 × 5 - 5), 3 pills every 30 mins, clock math, bat & ball cost, rapid counting traps. Absolutely NO calculus, formulas, or academic math proofs!';
+    } else if (category === Category.ScienceTech) {
+      categoryGuidance = 'MANDATORY: Mind-blowing physical wonders (why Mars sunsets are blue, pink hippo milk, why fingers wrinkle in water, koala fingerprints). ZERO Ohm\'s law, ZERO formulas, ZERO high school physics exams!';
+    } else if (category === Category.NatureAnimals) {
+      categoryGuidance = 'MANDATORY: Bizarre, unbelievable animal habits (wombats cubic poop, hummingbirds flying backwards, sea otter fur density).';
+    } else if (category === Category.LanguageLit) {
+      categoryGuidance = 'MANDATORY: Fast reflex word challenges (name 3 fruits without the letter E in 5 seconds, 15-letter isograms, bookkeeper double letters).';
+    } else if (category === Category.WouldYouRather) {
+      categoryGuidance = 'MANDATORY: Highly polarizing, hilarious, or agonizing lifestyle dilemmas that start heated comment wars.';
+    }
+
+    return `Generate 8 viral TikTok-ready posts for the "${category}" category.
+${categoryGuidance}
+Every post must be engineered for high social media engagement, stopping scrollers in under 3 seconds. [Seed: ${seed}]${avoidClause}`;
   },
 };

@@ -217,22 +217,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                 />
               </div>
 
-              {/* 1. Twitter / X */}
+              {/* 1. Twitter / X via Buffer */}
               <div className="border border-zinc-850 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white">𝕏 Twitter</span>
-                    <a href="https://developer.x.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
-                      Developer Portal &rarr;
-                    </a>
+                    <span className="font-bold text-sm text-white">𝕏 Twitter (via Buffer)</span>
+                    <span className="text-[10px] px-2 py-0.5 bg-emerald-500/20 text-emerald-400 font-bold rounded-lg">100% Free &bull; Connected</span>
                   </div>
                   <label className="flex items-center gap-1.5 text-xs text-zinc-300 cursor-pointer">
                     <input
                       type="checkbox"
-                      checked={socialConfig.twitter.enabled}
+                      checked={socialConfig.buffer?.enabled ?? true}
                       onChange={(e) => setSocialConfig({
                         ...socialConfig,
-                        twitter: { ...socialConfig.twitter, enabled: e.target.checked }
+                        buffer: {
+                          accessToken: socialConfig.buffer?.accessToken || 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT',
+                          channelId: socialConfig.buffer?.channelId || '6ada7779778b240e2f9221b8',
+                          enabled: e.target.checked
+                        }
                       })}
                       className="rounded"
                     />
@@ -240,34 +242,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                   </label>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-                  <input
-                    type="password"
-                    placeholder="API Key (Consumer Key)"
-                    value={socialConfig.twitter.apiKey}
-                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, apiKey: e.target.value } })}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  />
-                  <input
-                    type="password"
-                    placeholder="API Secret"
-                    value={socialConfig.twitter.apiSecret}
-                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, apiSecret: e.target.value } })}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Access Token"
-                    value={socialConfig.twitter.accessToken}
-                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, accessToken: e.target.value } })}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  />
-                  <input
-                    type="password"
-                    placeholder="Access Secret"
-                    value={socialConfig.twitter.accessSecret}
-                    onChange={(e) => setSocialConfig({ ...socialConfig, twitter: { ...socialConfig.twitter, accessSecret: e.target.value } })}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  />
+                  <div>
+                    <label className="text-[10px] text-zinc-500 block mb-1">Buffer Access Token</label>
+                    <input
+                      type="password"
+                      placeholder="Buffer Access Token"
+                      value={socialConfig.buffer?.accessToken ?? 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT'}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        buffer: {
+                          accessToken: e.target.value,
+                          channelId: socialConfig.buffer?.channelId || '6ada7779778b240e2f9221b8',
+                          enabled: socialConfig.buffer?.enabled ?? true
+                        }
+                      })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] text-zinc-500 block mb-1">Buffer Channel ID (@quiz_riddles)</label>
+                    <input
+                      type="text"
+                      placeholder="Buffer Channel ID"
+                      value={socialConfig.buffer?.channelId ?? '6ada7779778b240e2f9221b8'}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        buffer: {
+                          accessToken: socialConfig.buffer?.accessToken || '',
+                          channelId: e.target.value,
+                          enabled: socialConfig.buffer?.enabled ?? true
+                        }
+                      })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
+                    />
+                  </div>
                 </div>
               </div>
 

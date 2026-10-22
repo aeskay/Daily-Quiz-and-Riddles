@@ -1,5 +1,6 @@
 import { QuizPost, SocialConfig } from "../types";
 import { updateUserPost } from "./firestoreService";
+import { postToBuffer } from "./bufferService";
 
 /**
  * Builds standard social caption
@@ -18,6 +19,7 @@ export function buildSocialCaption(post: QuizPost): string {
 
 /**
  * Publishes a photo directly to Facebook Page via Meta Graph API v21.0
+ * Supports both public HTTPS URLs and direct binary file upload (Blob/dataUrl) via 'source'.
  */
 export async function directPostToFacebook(
   pageId: string,
@@ -27,8 +29,17 @@ export async function directPostToFacebook(
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const url = `https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}/photos`;
-    const formData = new URLSearchParams();
-    formData.append('url', imageUrl);
+    const formData = new FormData();
+
+    if (imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+      // Direct binary upload to Facebook (no external image hosting needed!)
+      const blobRes = await fetch(imageUrl);
+      const blob = await blobRes.blob();
+      formData.append('source', blob, 'post.png');
+    } else {
+      formData.append('url', imageUrl);
+    }
+
     formData.append('caption', caption);
     formData.append('access_token', accessToken);
     formData.append('published', 'true');
@@ -148,6 +159,22 @@ export async function dispatchPostDirectly(
     }
   }
 
+  // 3. Twitter / X via Buffer (100% Free, no X developer API credits needed)
+  if (social.buffer?.enabled && social.buffer?.accessToken) {
+    const channelId = social.buffer.channelId || '6ada7779778b240e2f9221b8';
+    const bufferRes = await postToBuffer(
+      social.buffer.accessToken,
+      channelId,
+      caption,
+      'shareNow'
+    );
+    if (bufferRes.success) {
+      platforms.push("Twitter (via Buffer)");
+    } else {
+      errors.push(`Twitter (Buffer): ${bufferRes.error}`);
+    }
+  }
+
   if (platforms.length === 0 && errors.length === 0) {
     errors.push("No platforms enabled or credentials missing. Please check 'FB Page' in Settings and ensure your Page Access Token and Page ID are saved.");
   }
@@ -156,10 +183,17 @@ export async function dispatchPostDirectly(
   const updatedPost: QuizPost = {
     ...post,
     scheduleStatus: isSuccess ? 'posted' : 'failed',
-    postedAt: isSuccess ? Date.now() : undefined,
     postedPlatforms: platforms,
-    postError: errors.length > 0 ? errors.join(' | ') : undefined,
   };
+
+  if (isSuccess) {
+    updatedPost.postedAt = Date.now();
+  }
+  if (errors.length > 0) {
+    updatedPost.postError = errors.join(' | ');
+  } else {
+    delete updatedPost.postError;
+  }
 
   await updateUserPost(userId, updatedPost);
 

@@ -27,6 +27,11 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     openId: '',
     enabled: false,
   },
+  buffer: {
+    accessToken: 'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT',
+    channelId: '6ada7779778b240e2f9221b8',
+    enabled: true,
+  },
   scheduleTimes: ["09:00", "13:00", "18:00"],
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago",
   autopostEnabled: false,

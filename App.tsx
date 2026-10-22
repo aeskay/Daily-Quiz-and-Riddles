@@ -4,10 +4,11 @@ import {
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
   Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
   Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon,
-  Clock
+  Clock, Globe
 } from 'lucide-react';
 import { QuizPost, Category, ViewMode } from './types';
 import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
+import { fetchRealHumanContent } from './services/humanTriviaService';
 import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
 import PostModal from './components/PostModal';
@@ -181,9 +182,11 @@ const App: React.FC = () => {
         if (res.success) {
           setSuccessMsg(`🚀 Autoposted to ${res.platforms.join(', ')}!`);
         } else if (res.errors?.length) {
+          sessionStorage.removeItem(lockKey);
           setError(`Autopost notice: ${res.errors.join(' | ')}`);
         }
       } catch (err: any) {
+        sessionStorage.removeItem(lockKey);
         console.error("[Auto-Dispatcher] Failed:", err);
         setError(`Autopost error: ${err?.message || err}`);
       } finally {
@@ -194,7 +197,7 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, [currentUser, allPosts]);
 
-  const handleLoadMore = async () => {
+  const handleLoadMore = async (mode: 'human' | 'ai' = 'human') => {
     if (!currentUser) {
       setError("Please sign in with Google to generate and save posts to your account.");
       return;
@@ -203,16 +206,22 @@ const App: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const recentTitles = allPosts
-        .slice(-30)
-        .map(p => p.visual_text.split('|')[0].trim())
-        .filter(Boolean);
+      let newPosts: QuizPost[] = [];
 
-      const prompt = selectedCategory
-        ? Prompts.getCategory(selectedCategory, recentTitles)
-        : Prompts.refresh(recentTitles);
+      if (mode === 'human') {
+        newPosts = await fetchRealHumanContent(selectedCategory, 8);
+      } else {
+        const recentTitles = allPosts
+          .slice(-30)
+          .map(p => p.visual_text.split('|')[0].trim())
+          .filter(Boolean);
 
-      const newPosts = await fetchQuizPosts(prompt);
+        const prompt = selectedCategory
+          ? Prompts.getCategory(selectedCategory, recentTitles)
+          : Prompts.refresh(recentTitles);
+
+        newPosts = await fetchQuizPosts(prompt);
+      }
 
       // Semantic deduplication
       const uniquePosts = newPosts.filter(newP => {
@@ -229,13 +238,17 @@ const App: React.FC = () => {
 
       if (postsToSave.length > 0) {
         await saveUserPosts(currentUser.uid, postsToSave);
-        setSuccessMsg(`Generated ${postsToSave.length} new posts synced to your account.`);
+        setSuccessMsg(
+          mode === 'human'
+            ? `Added ${postsToSave.length} authentic human questions from online trivia & community riddles!`
+            : `Generated ${postsToSave.length} viral social media posts!`
+        );
       } else {
         setSuccessMsg("Filtered repeats. Generating fresh topics...");
       }
     } catch (err: any) {
-      console.error("Engine failure:", err);
-      setError(err?.message || 'Generation failed. Check API key in Settings.');
+      console.error("Content fetch failure:", err);
+      setError(err?.message || 'Failed to retrieve posts. Check settings.');
     } finally {
       setLoading(false);
     }
@@ -527,10 +540,27 @@ const App: React.FC = () => {
             </p>
           </div>
           {viewMode !== ViewMode.Generate && viewMode !== ViewMode.Archive && (
-            <button onClick={handleLoadMore} disabled={loading} className="px-6 py-3 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-xl font-bold">
-              {loading ? <Loader2 className="animate-spin" size={20} /> : <Plus size={20} />}
-              GENERATE NEW
-            </button>
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <button 
+                onClick={() => handleLoadMore('human')} 
+                disabled={loading} 
+                className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-lg font-bold text-xs md:text-sm tracking-wide"
+                title="Fetch real human-written questions from online trivia & community riddles"
+              >
+                {loading ? <Loader2 className="animate-spin" size={17} /> : <Globe size={17} />}
+                <span>REAL HUMAN QUESTIONS</span>
+              </button>
+
+              <button 
+                onClick={() => handleLoadMore('ai')} 
+                disabled={loading} 
+                className="px-4 py-2.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl flex items-center gap-2 transition-all active:scale-95 disabled:opacity-50 shadow-lg font-bold text-xs md:text-sm tracking-wide"
+                title="Generate viral social media posts using high-engagement audience-tested prompts"
+              >
+                {loading ? <Loader2 className="animate-spin" size={17} /> : <Sparkles size={17} />}
+                <span>VIRAL AI GENERATOR</span>
+              </button>
+            </div>
           )}
         </header>
 
@@ -584,7 +614,7 @@ const App: React.FC = () => {
                    <p className="text-zinc-500 text-sm">Specify a topic, riddle idea, or trivia question. It will be generated and saved to your cloud account.</p>
                 </div>
                 <form onSubmit={handleCustomGenerate} className="space-y-4">
-                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A riddle about the Grand Hotel paradox..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-base shadow-inner" />
+                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A viral order-of-operations math quiz, a clever riddle about a candle, or a fun chocolate trivia question..." className="w-full h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-base shadow-inner" />
                    <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-sm shadow-lg">{isGeneratingCustom ? <Loader2 className="animate-spin" /> : <Send size={18} />} GENERATE & DESIGN</button>
                 </form>
               </div>
@@ -602,9 +632,26 @@ const App: React.FC = () => {
                           <div className="h-full flex flex-col justify-between min-h-[16rem]">
                             <div>
                               <div className="flex justify-between items-start mb-4">
-                                <span className="text-[10px] font-black uppercase tracking-wider text-[#0F4C81] px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-100">
-                                  {post.category}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-[#0F4C81] px-2.5 py-1 bg-blue-50 rounded-lg border border-blue-100">
+                                    {post.category}
+                                  </span>
+                                  {post.source === 'human_web' && (
+                                    <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Globe size={10} /> Real Human
+                                    </span>
+                                  )}
+                                  {post.source === 'community' && (
+                                    <span className="text-[9px] font-bold text-teal-700 bg-teal-50 border border-teal-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <UserIcon size={10} /> Real Human
+                                    </span>
+                                  )}
+                                  {post.source === 'ai' && (
+                                    <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                      <Sparkles size={10} /> Viral AI
+                                    </span>
+                                  )}
+                                </div>
                                 <div className="flex items-center gap-1.5">
                                   {post.scheduleStatus === 'queued' && (
                                     <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">

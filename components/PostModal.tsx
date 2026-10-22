@@ -23,17 +23,38 @@ type LayoutType = 'auto' | 'side' | 'center' | 'text-only' | 'wyr';
 
 /** Official branding block scaled for 1000px canvas */
 const CanvasBranding: React.FC = () => (
-  <div style={{ position: 'absolute', bottom: '60px', right: '70px', display: 'flex', alignItems: 'center', gap: '16px' }} className="select-none">
+  <div style={{ position: 'absolute', bottom: '50px', right: '60px', display: 'flex', alignItems: 'center', gap: '14px', zIndex: 10 }} className="select-none">
     <img
       src={LOGO_DATA_URL}
       alt="Daily Quiz & Riddles Logo"
-      style={{ width: '68px', height: '68px', objectFit: 'contain' }}
+      style={{ width: '64px', height: '64px', objectFit: 'contain', flexShrink: 0 }}
     />
-    <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.1 }}>
-      <span className="font-script" style={{ fontSize: '34px', color: '#0A4B78', letterSpacing: '0.5px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: 'max-content', whiteSpace: 'nowrap' }}>
+      <span 
+        className="font-script" 
+        style={{ 
+          fontFamily: "'Dancing Script', cursive, sans-serif",
+          fontSize: '30px', 
+          color: '#0A4B78', 
+          letterSpacing: '0.5px',
+          whiteSpace: 'nowrap',
+          lineHeight: '34px',
+          display: 'block'
+        }}
+      >
         Daily Quiz and Riddles
       </span>
-      <span style={{ fontSize: '19px', color: '#0A4B78', fontWeight: 700, marginTop: '5px' }}>
+      <span 
+        style={{ 
+          fontSize: '18px', 
+          color: '#0A4B78', 
+          fontWeight: 700, 
+          whiteSpace: 'nowrap',
+          lineHeight: '22px',
+          display: 'block',
+          marginTop: '2px'
+        }}
+      >
         @quiz_riddles
       </span>
     </div>
@@ -302,9 +323,10 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     const origTransform = el.style.transform;
     try {
       el.style.transform = 'none';
-      return await htmlToImage.toPng(el, {
-        quality: 1.0,
-        pixelRatio: 1.2,
+      // Use toJpeg with quality 0.85 so dataUrl is compressed (~80KB) and safely within Firestore's 1MB limit
+      return await htmlToImage.toJpeg(el, {
+        quality: 0.85,
+        pixelRatio: 1.0,
         backgroundColor: '#ffffff',
         skipFonts: true,
       });
@@ -389,6 +411,14 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
     } finally {
       el.style.transform = origTransform;
     }
+  };
+
+  const handleShareToTwitter = () => {
+    const parts = (post.visual_text || '').split(' | ');
+    const body = parts.length > 1 ? `${parts[0]}\n\n${parts.slice(1).join('\n\n')}` : (post.visual_text || '');
+    const tweetText = `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!`;
+    const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
+    window.open(tweetUrl, '_blank', 'noopener,noreferrer');
   };
 
   const handleShare = async () => {
@@ -530,10 +560,18 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                     onClick={handlePostNow}
                     disabled={isPostingNow}
                     className="py-3 px-4 bg-[#0477CF] hover:bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
-                    title="Immediately post to your enabled socials"
+                    title="Immediately post to your enabled socials (Facebook/Instagram)"
                   >
                     {isPostingNow ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
                     Post Now
+                  </button>
+                  <button
+                    onClick={handleShareToTwitter}
+                    type="button"
+                    className="py-3 px-3.5 bg-zinc-900 hover:bg-black border border-zinc-700 hover:border-zinc-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+                    title="Tweet directly to X (100% Free, no API credits needed)"
+                  >
+                    𝕏 Tweet
                   </button>
                 </div>
                 {postNowStatus && (
