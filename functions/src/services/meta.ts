@@ -29,13 +29,16 @@ export async function postToFacebook(
       },
     });
 
-    const publishedId = response.data.post_id || response.data.id;
+    const photoId = response.data.id;
+    const postUrl = `https://www.facebook.com/photo?fbid=${photoId}`;
+    const pageUrl = `https://www.facebook.com/${creds.pageId}`;
     console.log(`[Facebook] Published successfully to Page ID: ${creds.pageId}`);
-    console.log(`[Facebook] Direct Post Link: https://www.facebook.com/${publishedId}`);
+    console.log(`[Facebook] View on Page: ${pageUrl}`);
+    console.log(`[Facebook] Direct Photo Link: ${postUrl}`);
 
     return {
       success: true,
-      postId: publishedId,
+      postId: photoId,
     };
   } catch (err: any) {
     const errorMsg = err?.response?.data?.error?.message || err?.message || "Failed to publish to Facebook";
