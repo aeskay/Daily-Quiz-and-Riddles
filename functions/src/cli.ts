@@ -38,7 +38,7 @@ function buildCaption(post: any): string {
     body = post.visual_text || "";
   }
 
-  return `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!\n\n#DailyQuizAndRiddles #Quiz #Riddles #BrainTeaser #Trivia #Challenge`;
+  return `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!`;
 }
 
 async function dispatchPostToSocials(
