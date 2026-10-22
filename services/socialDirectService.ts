@@ -88,8 +88,8 @@ export async function directPostToInstagram(
 
     const creationId = containerData.id;
 
-    // Small delay for processing
-    await new Promise((r) => setTimeout(r, 3000));
+    // Wait 4s for Instagram server processing
+    await new Promise((r) => setTimeout(r, 4000));
 
     // 2. Publish container
     const publishUrl = `https://graph.facebook.com/v21.0/${encodeURIComponent(instagramAccountId)}/media_publish`;
@@ -120,7 +120,7 @@ export async function dispatchPostDirectly(
   social: SocialConfig,
   userId: string
 ): Promise<{ success: boolean; platforms: string[]; errors: string[] }> {
-  const imageUrl = post.renderedImageUrl || post.imageUrl;
+  let imageUrl = post.renderedImageUrl || post.imageUrl;
   if (!imageUrl) {
     throw new Error("No image available to post. Please queue or upload an image first.");
   }
@@ -128,8 +128,9 @@ export async function dispatchPostDirectly(
   const caption = buildSocialCaption(post);
   const platforms: string[] = [];
   const errors: string[] = [];
+  let publicHttpsUrl = imageUrl.startsWith('http') ? imageUrl : '';
 
-  // 1. Facebook Page
+  // 1. Facebook Page First (Binary upload works with dataUrl!)
   if (social.meta.postToFacebook && social.meta.pageId && social.meta.accessToken) {
     const fbRes = await directPostToFacebook(
       social.meta.pageId,
@@ -139,23 +140,45 @@ export async function dispatchPostDirectly(
     );
     if (fbRes.success) {
       platforms.push("facebook");
+      // If we uploaded a dataUrl, fetch the newly created high-res Meta CDN photo URL
+      // so Instagram can publish it seamlessly!
+      if (fbRes.id) {
+        try {
+          const photoRes = await fetch(`https://graph.facebook.com/v21.0/${fbRes.id}?fields=images&access_token=${encodeURIComponent(social.meta.accessToken)}`);
+          const photoData = await photoRes.json();
+          if (photoData.images && photoData.images.length > 0) {
+            publicHttpsUrl = photoData.images[0].source;
+            post.renderedImageUrl = publicHttpsUrl;
+            if (userId) {
+              updateUserPost(userId, { ...post, renderedImageUrl: publicHttpsUrl });
+            }
+          }
+        } catch (e) {
+          console.warn("Could not retrieve Facebook CDN image URL:", e);
+        }
+      }
     } else {
       errors.push(`Facebook: ${fbRes.error}`);
     }
   }
 
-  // 2. Instagram
+  // 2. Instagram (Requires a public HTTPS image URL)
   if (social.meta.postToInstagram && social.meta.instagramAccountId && social.meta.accessToken) {
-    const igRes = await directPostToInstagram(
-      social.meta.instagramAccountId,
-      social.meta.accessToken,
-      caption,
-      imageUrl
-    );
-    if (igRes.success) {
-      platforms.push("instagram");
+    const targetIgUrl = publicHttpsUrl || (imageUrl.startsWith('http') ? imageUrl : '');
+    if (!targetIgUrl) {
+      errors.push("Instagram: A public HTTPS image URL is required. (Enable Facebook to auto-generate a Meta CDN image)");
     } else {
-      errors.push(`Instagram: ${igRes.error}`);
+      const igRes = await directPostToInstagram(
+        social.meta.instagramAccountId,
+        social.meta.accessToken,
+        caption,
+        targetIgUrl
+      );
+      if (igRes.success) {
+        platforms.push("instagram");
+      } else {
+        errors.push(`Instagram: ${igRes.error}`);
+      }
     }
   }
 
@@ -176,7 +199,7 @@ export async function dispatchPostDirectly(
   }
 
   if (platforms.length === 0 && errors.length === 0) {
-    errors.push("No platforms enabled or credentials missing. Please check 'FB Page' in Settings and ensure your Page Access Token and Page ID are saved.");
+    errors.push("No platforms enabled or credentials missing. Please check Settings.");
   }
 
   const isSuccess = platforms.length > 0;
@@ -195,11 +218,86 @@ export async function dispatchPostDirectly(
     delete updatedPost.postError;
   }
 
-  await updateUserPost(userId, updatedPost);
+  if (userId) {
+    await updateUserPost(userId, updatedPost);
+  }
 
   return {
     success: isSuccess,
     platforms,
     errors,
   };
+}
+
+export interface SocialTestResult {
+  platform: 'facebook' | 'instagram' | 'buffer';
+  name: string;
+  success: boolean;
+  id?: string;
+  error?: string;
+}
+
+/**
+ * Diagnostic test: publishes a verified test card to all 3 platforms and returns their live results
+ */
+export async function testAllSocialIntegrations(social: SocialConfig): Promise<SocialTestResult[]> {
+  const results: SocialTestResult[] = [];
+  const testCaption = `🧠 DAILY QUIZ & RIDDLES\n\nLive Pipeline Test — Facebook, Instagram & X/Twitter verified working!\n\n👇 Drop your guess in the comments!`;
+  
+  // Use our proven high-res Meta image
+  let cdnUrl = 'https://scontent-dfw5-2.xx.fbcdn.net/v/t39.30808-6/365467817_114353981749580_8926697481991324250_n.png?_nc_cat=104&ccb=1-7&_nc_sid=585619&_nc_ohc=pEo2ALjso2AQ7kNvwG4aQBi&_nc_oc=AdoWLgnf8ztlvUWPNlXyMdlikUBRcexaiW9oY0aMtL4vC1egl1fUeU9jXFTbje71SiY&_nc_zt=23&_nc_ht=scontent-dfw5-2.xx&edm=AId9v20EAAAA&_nc_gid=SjAXKmiQTnB6qRqCtVhiSg&_nc_tpa=Q5bMBQLYbPa-AFpguGRIUH_AvaH4AFtQ_nweV-F9u1h2R_g09VmMnXqVY24x07CXE_zRn_uehJOVyKIheA&oh=00_AQOYLei3aPw2csbgKv2MIUfLmqkKWmBidebD-HCZ1HlaXQ&oe=6AE0694C';
+  
+  // 1. Facebook Test
+  if (social.meta.postToFacebook && social.meta.pageId && social.meta.accessToken) {
+    const fbRes = await directPostToFacebook(social.meta.pageId, social.meta.accessToken, testCaption, cdnUrl);
+    results.push({
+      platform: 'facebook',
+      name: 'Facebook Page',
+      success: fbRes.success,
+      id: fbRes.id,
+      error: fbRes.error,
+    });
+    if (fbRes.id) {
+      try {
+        const photoRes = await fetch(`https://graph.facebook.com/v21.0/${fbRes.id}?fields=images&access_token=${encodeURIComponent(social.meta.accessToken)}`);
+        const photoData = await photoRes.json();
+        if (photoData.images?.[0]?.source) {
+          cdnUrl = photoData.images[0].source;
+        }
+      } catch (e) {}
+    }
+  } else {
+    results.push({ platform: 'facebook', name: 'Facebook Page', success: false, error: 'Disabled or missing Page ID / Token' });
+  }
+
+  // 2. Instagram Test
+  if (social.meta.postToInstagram && social.meta.instagramAccountId && social.meta.accessToken) {
+    const igRes = await directPostToInstagram(social.meta.instagramAccountId, social.meta.accessToken, testCaption, cdnUrl);
+    results.push({
+      platform: 'instagram',
+      name: 'Instagram Business',
+      success: igRes.success,
+      id: igRes.id,
+      error: igRes.error,
+    });
+  } else {
+    results.push({ platform: 'instagram', name: 'Instagram Business', success: false, error: 'Disabled or missing Instagram Account ID' });
+  }
+
+  // 3. Twitter / X via Buffer Test
+  if (social.buffer?.enabled && social.buffer?.accessToken) {
+    const channelId = social.buffer.channelId || '6ada7779778b240e2f9221b8';
+    const bufRes = await postToBuffer(social.buffer.accessToken, channelId, testCaption, 'shareNow');
+    results.push({
+      platform: 'buffer',
+      name: 'Twitter / X (@quiz_riddles via Buffer)',
+      success: bufRes.success,
+      id: bufRes.id,
+      error: bufRes.error,
+    });
+  } else {
+    results.push({ platform: 'buffer', name: 'Twitter / X (Buffer)', success: false, error: 'Disabled or missing Buffer Token' });
+  }
+
+  return results;
 }

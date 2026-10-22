@@ -16,11 +16,11 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     enabled: false,
   },
   meta: {
-    pageId: '',
-    instagramAccountId: '',
-    accessToken: '',
-    postToFacebook: false,
-    postToInstagram: false,
+    pageId: '104499642745480',
+    instagramAccountId: '17841471698421784',
+    accessToken: 'EAAUhtTV8puEBSxwVN5ZCHDKw4hZAfd3Fk00eE1fFBmJBu4pLjPLoVlF5vEZBIRPWlLURWwSY21btJ3VchRrhnxuvye5gOJXI8w9cpFOePQaFSBe3nE6kPOMf2nsVchUU250korktpyAsoVZAHFu9uzDmC1hGq5zsGU2170aDvezGTa6kn2Mi62ZBqjuSKa3bd25UZCTHR9riYxjDR6DvZByk5e3VSE2i4zRFi8hItCewNiEZB4WTMKUEwj1o42fq',
+    postToFacebook: true,
+    postToInstagram: true,
   },
   tiktok: {
     accessToken: '',
@@ -34,7 +34,7 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
   },
   scheduleTimes: ["09:00", "13:00", "18:00"],
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago",
-  autopostEnabled: false,
+  autopostEnabled: true,
 };
 
 const LOCAL_STORAGE_KEY = 'dqr_social_config';
@@ -43,7 +43,27 @@ export function getLocalSocialConfig(): SocialConfig {
   try {
     const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
     if (saved) {
-      return { ...DEFAULT_SOCIAL_CONFIG, ...JSON.parse(saved) };
+      const parsed = JSON.parse(saved);
+      return {
+        ...DEFAULT_SOCIAL_CONFIG,
+        ...parsed,
+        meta: {
+          ...DEFAULT_SOCIAL_CONFIG.meta,
+          ...(parsed.meta || {}),
+          pageId: parsed.meta?.pageId || DEFAULT_SOCIAL_CONFIG.meta.pageId,
+          instagramAccountId: parsed.meta?.instagramAccountId || DEFAULT_SOCIAL_CONFIG.meta.instagramAccountId,
+          accessToken: parsed.meta?.accessToken || DEFAULT_SOCIAL_CONFIG.meta.accessToken,
+          postToFacebook: parsed.meta?.postToFacebook ?? true,
+          postToInstagram: parsed.meta?.postToInstagram ?? true,
+        },
+        buffer: {
+          ...DEFAULT_SOCIAL_CONFIG.buffer,
+          ...(parsed.buffer || {}),
+          accessToken: parsed.buffer?.accessToken || DEFAULT_SOCIAL_CONFIG.buffer.accessToken,
+          channelId: parsed.buffer?.channelId || DEFAULT_SOCIAL_CONFIG.buffer.channelId,
+          enabled: parsed.buffer?.enabled ?? true,
+        }
+      };
     }
   } catch (e) {
     console.warn("Local social config load error:", e);

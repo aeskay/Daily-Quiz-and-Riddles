@@ -179,8 +179,10 @@ const App: React.FC = () => {
       try {
         console.log(`[Auto-Dispatcher] Slot ${matchedSlot} due! Posting ${nextPost.id}...`);
         const res = await dispatchPostDirectly(nextPost, config, currentUser.uid);
-        if (res.success) {
-          setSuccessMsg(`🚀 Autoposted to ${res.platforms.join(', ')}!`);
+        if (res.platforms.length > 0 && res.errors.length === 0) {
+          setSuccessMsg(`🚀 Autoposted to ALL: ${res.platforms.join(', ')}!`);
+        } else if (res.platforms.length > 0 && res.errors.length > 0) {
+          setSuccessMsg(`✅ Posted to ${res.platforms.join(', ')}! (⚠️ ${res.errors.join(' | ')})`);
         } else if (res.errors?.length) {
           sessionStorage.removeItem(lockKey);
           setError(`Autopost notice: ${res.errors.join(' | ')}`);

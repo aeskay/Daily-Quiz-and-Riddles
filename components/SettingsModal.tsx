@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Key, Check, AlertCircle, Loader2, Sparkles, 
-  Image as ImageIcon, Share2, Clock, Calendar, CheckSquare, Square
+  Image as ImageIcon, Share2, Clock, Calendar, CheckSquare, Square, Send
 } from 'lucide-react';
+import { testAllSocialIntegrations, SocialTestResult } from '../services/socialDirectService';
 import { getGeminiApiKey, setGeminiApiKey } from '../services/geminiService';
 import { getPixabayKey, setPixabayKey } from '../services/imageService';
 import { GoogleGenAI } from '@google/genai';
@@ -28,6 +29,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   // Social Config - Initialize immediately from localStorage so keys never disappear
   const [socialConfig, setSocialConfig] = useState<SocialConfig>(() => getLocalSocialConfig());
   const [saveMsg, setSaveMsg] = useState(false);
+  const [isTestingSocials, setIsTestingSocials] = useState(false);
+  const [socialTestResults, setSocialTestResults] = useState<SocialTestResult[] | null>(null);
+
+  const handleTestAllSocials = async () => {
+    setIsTestingSocials(true);
+    setSocialTestResults(null);
+    try {
+      await saveSocialConfig(userId, socialConfig);
+      const results = await testAllSocialIntegrations(socialConfig);
+      setSocialTestResults(results);
+    } catch (err: any) {
+      setSocialTestResults([
+        { platform: 'facebook', name: 'Pipeline', success: false, error: err?.message || String(err) }
+      ]);
+    } finally {
+      setIsTestingSocials(false);
+    }
+  };
   const [newTimeInput, setNewTimeInput] = useState('');
   const [detectingIg, setDetectingIg] = useState(false);
   const [detectIgMsg, setDetectIgMsg] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -384,6 +403,50 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                   <p className={`text-[11px] font-semibold mt-1.5 ${detectIgMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
                     {detectIgMsg.msg}
                   </p>
+                )}
+              </div>
+
+              {/* Test All Socials Diagnostic Suite */}
+              <div className="border border-blue-500/30 bg-blue-500/5 p-4 rounded-2xl space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="font-bold text-sm text-white flex items-center gap-2">
+                      <Sparkles size={16} className="text-[#0477CF]" /> One-Click Social Pipeline Test
+                    </span>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Sends a live test post to Facebook, Instagram, and Twitter (X) to verify all 3 APIs are active.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleTestAllSocials}
+                    disabled={isTestingSocials}
+                    className="px-4 py-2.5 bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
+                  >
+                    {isTestingSocials ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+                    {isTestingSocials ? 'Testing APIs...' : '⚡ Test All 3 Now'}
+                  </button>
+                </div>
+
+                {socialTestResults && (
+                  <div className="space-y-2 pt-2 border-t border-zinc-800">
+                    {socialTestResults.map((r, i) => (
+                      <div
+                        key={i}
+                        className={`p-2.5 rounded-xl text-xs flex items-center justify-between gap-2 border ${
+                          r.success
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+                            : 'bg-red-500/10 border-red-500/30 text-red-300'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          {r.success ? <Check size={14} className="text-emerald-400 shrink-0" /> : <AlertCircle size={14} className="text-red-400 shrink-0" />}
+                          <span className="font-bold">{r.name}:</span>
+                          <span>{r.success ? `✅ Published (ID: ${r.id})` : `❌ Failed (${r.error})`}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
 

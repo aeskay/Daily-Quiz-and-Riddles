@@ -30,8 +30,9 @@ export async function postToBuffer(
       }
     `;
 
+    // On Netlify in the browser, route through Netlify Serverless Function or proxy
     const endpoint = typeof window !== 'undefined'
-      ? '/api/buffer/graphql'
+      ? (window.location.hostname.includes('netlify.app') ? '/.netlify/functions/buffer' : '/api/buffer/graphql')
       : 'https://api.buffer.com/graphql';
 
     const res = await fetch(endpoint, {
@@ -48,21 +49,24 @@ export async function postToBuffer(
             text,
             schedulingType: 'automatic',
             mode,
-            needsApproval: false,
           },
         },
       }),
     });
 
     const data = await res.json();
-    const result = data?.data?.createPost;
-
-    if (result?.post?.id) {
-      return { success: true, id: result.post.id };
+    if (data.errors && data.errors.length > 0) {
+      return { success: false, error: data.errors[0]?.message || 'Buffer GraphQL error' };
     }
 
-    const errorMsg = result?.message || data?.errors?.[0]?.message || 'Buffer post creation failed';
-    return { success: false, error: errorMsg };
+    const payload = data?.data?.createPost;
+    if (payload?.post?.id) {
+      return { success: true, id: payload.post.id };
+    } else if (payload?.message) {
+      return { success: false, error: payload.message };
+    } else {
+      return { success: false, error: 'Unknown response from Buffer' };
+    }
   } catch (err: any) {
     return { success: false, error: err?.message || String(err) };
   }
