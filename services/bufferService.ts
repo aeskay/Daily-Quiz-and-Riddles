@@ -30,7 +30,11 @@ export async function postToBuffer(
       }
     `;
 
-    const res = await fetch('https://api.buffer.com/graphql', {
+    const endpoint = typeof window !== 'undefined'
+      ? '/api/buffer/graphql'
+      : 'https://api.buffer.com/graphql';
+
+    const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken.trim()}`,

@@ -3,6 +3,12 @@
   publish = "dist"
 
 [[redirects]]
+  from = "/api/buffer/*"
+  to = "https://api.buffer.com/:splat"
+  status = 200
+  force = true
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -2,6 +2,7 @@ import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
 import { postToTwitter, TwitterCredentials } from "./services/twitter";
+import { postToBuffer, BufferCredentials } from "./services/buffer";
 import { postToFacebook, postToInstagram, MetaCredentials } from "./services/meta";
 import { postToTikTok, TikTokCredentials } from "./services/tiktok";
 
@@ -10,6 +11,7 @@ const db = admin.firestore();
 
 interface SocialSettings {
   twitter?: TwitterCredentials & { enabled: boolean };
+  buffer?: BufferCredentials;
   meta?: MetaCredentials & { postToFacebook: boolean; postToInstagram: boolean };
   tiktok?: TikTokCredentials & { enabled: boolean };
   scheduleTimes?: string[]; // e.g. ["09:00", "13:00", "18:00"]
@@ -50,8 +52,15 @@ async function dispatchPostToSocials(
   const platforms: string[] = [];
   const errors: string[] = [];
 
-  // 1. Post to Twitter / X
-  if (social.twitter?.enabled && social.twitter.apiKey) {
+  // 1. Post to Twitter / X (via Buffer or direct Twitter API)
+  if (social.buffer?.enabled && social.buffer.accessToken) {
+    const res = await postToBuffer(social.buffer, caption);
+    if (res.success) {
+      platforms.push("Twitter (via Buffer)");
+    } else if (res.error) {
+      errors.push(`Twitter (Buffer): ${res.error}`);
+    }
+  } else if (social.twitter?.enabled && social.twitter.apiKey) {
     const res = await postToTwitter(social.twitter, caption, imageUrl);
     if (res.success) {
       platforms.push("twitter");

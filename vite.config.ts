@@ -16,6 +16,13 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 3000,
       host: true,
+      proxy: {
+        '/api/buffer': {
+          target: 'https://api.buffer.com',
+          changeOrigin: true,
+          rewrite: (path) => path.replace(/^\/api\/buffer/, ''),
+        },
+      },
     },
     build: {
       outDir: 'dist',

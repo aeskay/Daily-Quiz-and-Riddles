@@ -29,6 +29,8 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   const [socialConfig, setSocialConfig] = useState<SocialConfig>(() => getLocalSocialConfig());
   const [saveMsg, setSaveMsg] = useState(false);
   const [newTimeInput, setNewTimeInput] = useState('');
+  const [detectingIg, setDetectingIg] = useState(false);
+  const [detectIgMsg, setDetectIgMsg] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
     if (isOpen) {
@@ -55,6 +57,40 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
     }, 800);
   };
 
+
+  const handleDetectInstagram = async () => {
+    if (!socialConfig.meta.pageId.trim() || !socialConfig.meta.accessToken.trim()) {
+      setDetectIgMsg({ ok: false, msg: "Please enter your Facebook Page ID and Access Token first." });
+      return;
+    }
+    setDetectingIg(true);
+    setDetectIgMsg(null);
+    try {
+      const pageId = socialConfig.meta.pageId.trim();
+      const token = socialConfig.meta.accessToken.trim();
+      const res = await fetch(`https://graph.facebook.com/v21.0/${encodeURIComponent(pageId)}?fields=name,instagram_business_account&access_token=${encodeURIComponent(token)}`);
+      const data = await res.json();
+      if (data.instagram_business_account?.id) {
+        setSocialConfig({
+          ...socialConfig,
+          meta: {
+            ...socialConfig.meta,
+            instagramAccountId: data.instagram_business_account.id,
+            postToInstagram: true
+          }
+        });
+        setDetectIgMsg({ ok: true, msg: `Found IG ID: ${data.instagram_business_account.id}! Auto-filled & enabled.` });
+      } else if (data.error) {
+        setDetectIgMsg({ ok: false, msg: data.error.message || "Meta API error" });
+      } else {
+        setDetectIgMsg({ ok: false, msg: "No Instagram Business account linked to this Facebook Page." });
+      }
+    } catch (err: any) {
+      setDetectIgMsg({ ok: false, msg: err?.message || "Detection request failed" });
+    } finally {
+      setDetectingIg(false);
+    }
+  };
 
   const handleTestKey = async () => {
     if (!geminiKey.trim()) {
@@ -318,13 +354,24 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, pageId: e.target.value } })}
                     className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
                   />
-                  <input
-                    type="text"
-                    placeholder="Instagram Business/Creator ID"
-                    value={socialConfig.meta.instagramAccountId}
-                    onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, instagramAccountId: e.target.value } })}
-                    className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
-                  />
+                  <div className="flex gap-1.5">
+                    <input
+                      type="text"
+                      placeholder="Instagram Business/Creator ID"
+                      value={socialConfig.meta.instagramAccountId}
+                      onChange={(e) => setSocialConfig({ ...socialConfig, meta: { ...socialConfig.meta, instagramAccountId: e.target.value } })}
+                      className="bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white flex-1 min-w-0"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleDetectInstagram}
+                      disabled={detectingIg || !socialConfig.meta.pageId}
+                      className="px-2.5 py-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-500 hover:to-pink-500 text-white rounded-xl font-bold text-[10px] shrink-0 disabled:opacity-50 transition-all flex items-center gap-1 shadow-md"
+                      title="Auto-detect Instagram Business ID using your saved Facebook credentials"
+                    >
+                      {detectingIg ? <Loader2 size={12} className="animate-spin" /> : '⚡ Auto-Detect'}
+                    </button>
+                  </div>
                   <input
                     type="password"
                     placeholder="Long-Lived Page Access Token"
@@ -333,6 +380,11 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     className="md:col-span-2 bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white"
                   />
                 </div>
+                {detectIgMsg && (
+                  <p className={`text-[11px] font-semibold mt-1.5 ${detectIgMsg.ok ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {detectIgMsg.msg}
+                  </p>
+                )}
               </div>
 
               {/* 3. TikTok */}
