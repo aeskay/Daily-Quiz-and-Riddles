@@ -63,10 +63,13 @@ export async function postToTwitter(
       tweetId: tweet.data.id,
     };
   } catch (err: any) {
-    console.error("Twitter publishing error:", err?.response?.data || err?.message || err);
+    const errorDetail = err?.data 
+      ? JSON.stringify(err.data) 
+      : (err?.response?.data ? JSON.stringify(err.response.data) : (err?.message || String(err)));
+    console.error("Twitter publishing error details:", errorDetail);
     return {
       success: false,
-      error: err?.response?.data?.detail || err?.message || "Failed to publish to Twitter.",
+      error: errorDetail || "Failed to publish to Twitter.",
     };
   }
 }
