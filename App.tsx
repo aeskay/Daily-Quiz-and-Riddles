@@ -23,7 +23,13 @@ import {
   clearAllUserPosts
 } from './services/firestoreService';
 import * as db from './services/dbService';
-import { getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate } from './services/socialService';
+import { 
+  getLocalSocialConfig, 
+  getQueuedScheduleInfo, 
+  formatPostedDate, 
+  unqueuePost, 
+  realignQueuedPosts 
+} from './services/socialService';
 import { dispatchPostDirectly, parseWyr, stripHookFromQuestion } from './services/socialDirectService';
 
 const App: React.FC = () => {
@@ -231,14 +237,38 @@ const App: React.FC = () => {
   const handleUnqueue = async (post: QuizPost) => {
     if (!currentUser) return;
     try {
-      const updated: QuizPost = { 
-        ...post, 
-        scheduleStatus: 'draft' 
-      };
-      await updateUserPost(currentUser.uid, updated);
+      const updated = await unqueuePost(currentUser.uid, post);
+      setAllPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
       setSuccessMsg("Removed post from autopost queue.");
     } catch (err: any) {
       setError("Failed to remove post from queue: " + (err?.message || err));
+    }
+  };
+
+  const [isRealigning, setIsRealigning] = useState(false);
+  const hasQueueCollision = useMemo(() => {
+    const queued = allPosts.filter(p => p.scheduleStatus === 'queued' && p.scheduledTime);
+    const times = new Set<string>();
+    for (const p of queued) {
+      const t = new Date(p.scheduledTime!).getTime();
+      const slotKey = Math.round(t / (15 * 60 * 1000));
+      if (times.has(String(slotKey))) return true;
+      times.add(String(slotKey));
+    }
+    return false;
+  }, [allPosts]);
+
+  const handleRealignQueue = async () => {
+    if (!currentUser) return;
+    setIsRealigning(true);
+    try {
+      const queued = allPosts.filter(p => p.scheduleStatus === 'queued');
+      const updated = await realignQueuedPosts(currentUser.uid, socialConfig.scheduleTimes, queued);
+      setSuccessMsg("Autopost queue re-aligned with unique schedule times!");
+    } catch (err: any) {
+      setError("Failed to re-align queue: " + (err?.message || err));
+    } finally {
+      setIsRealigning(false);
     }
   };
 
@@ -305,8 +335,12 @@ const App: React.FC = () => {
     } else if (viewMode === ViewMode.Queue) {
       if (queueSubTab === 'queued') {
         base = allPosts.filter(p => p.scheduleStatus === 'queued');
-        // Sort queued posts by when they will post (FIFO by timestamp)
-        return [...base].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        // Sort queued posts chronologically by when they are scheduled to post
+        return [...base].sort((a, b) => {
+          const timeA = a.scheduledTime ? new Date(a.scheduledTime).getTime() : (a.timestamp || 0);
+          const timeB = b.scheduledTime ? new Date(b.scheduledTime).getTime() : (b.timestamp || 0);
+          return timeA - timeB;
+        });
       } else {
         base = allPosts.filter(p => p.scheduleStatus === 'posted');
         // Sort posted posts with most recently posted first
@@ -646,6 +680,24 @@ const App: React.FC = () => {
               </div>
             ) : (
               <div className="pb-32 sm:pb-40">
+                {viewMode === ViewMode.Queue && queueSubTab === 'queued' && hasQueueCollision && (
+                  <div className="w-full mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between text-xs text-amber-300 gap-3 shadow-lg">
+                    <div className="flex items-center gap-2.5">
+                      <Clock size={18} className="text-amber-400 shrink-0" />
+                      <div>
+                        <span className="font-bold block text-sm text-amber-200">Schedule Collision Detected</span>
+                        <span className="text-zinc-300 text-xs">Two or more posts are currently queued for the exact same time slot.</span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleRealignQueue}
+                      disabled={isRealigning}
+                      className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-black font-black text-xs rounded-xl transition-all shadow active:scale-95 disabled:opacity-50 shrink-0"
+                    >
+                      {isRealigning ? 'Re-aligning Slots...' : 'Fix & Re-align Slots'}
+                    </button>
+                  </div>
+                )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 md:gap-8">
                   {filteredPosts.map((post, postIndex) => {
                     let context: string | null = null;
@@ -859,6 +911,7 @@ const App: React.FC = () => {
 
       <PostModal 
         post={selectedPost} 
+        allPosts={allPosts}
         onClose={() => setSelectedPost(null)} 
         onPostUpdated={(updated) => {
           setSelectedPost(updated);

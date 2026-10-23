@@ -41,6 +41,7 @@ export interface QuizPost {
   scheduledTime?: string; // e.g. "09:00", "13:00", "18:00" or ISO string
   postedAt?: number;
   postedPlatforms?: string[];
+  bufferPostIds?: string[];
   postError?: string;
   source?: 'ai' | 'human_web' | 'community';
 }

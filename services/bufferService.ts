@@ -169,16 +169,18 @@ export async function postToAllBufferChannels(
   imageUrl?: string,
   mode: 'shareNow' | 'customScheduled' | 'addToQueue' = 'shareNow',
   dueAt?: string
-): Promise<{ success: boolean; platforms: string[]; errors: string[] }> {
+): Promise<{ success: boolean; platforms: string[]; errors: string[]; ids: string[] }> {
   const channels = await getBufferChannels(accessToken);
   const platforms: string[] = [];
   const errors: string[] = [];
+  const ids: string[] = [];
 
   for (const ch of channels) {
     const res = await postToBuffer(accessToken, ch.id, text, imageUrl, mode, dueAt);
     if (res.success) {
       const label = ch.service === 'instagram' ? 'Instagram (+ FB Page cross-post)' : `${ch.name} (${ch.service})`;
       platforms.push(label);
+      if (res.id) ids.push(res.id);
     } else {
       errors.push(`${ch.name} (${ch.service}): ${res.error}`);
     }
@@ -188,5 +190,108 @@ export async function postToAllBufferChannels(
     success: platforms.length > 0,
     platforms,
     errors,
+    ids,
   };
+}
+
+/**
+ * Deletes a scheduled post from Buffer
+ */
+export async function deletePostFromBuffer(
+  accessToken: string,
+  postId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const mutation = `
+      mutation DeletePost($input: DeletePostInput!) {
+        deletePost(input: $input) {
+          ... on PostActionSuccess {
+            post {
+              id
+            }
+          }
+          ... on UnexpectedError {
+            message
+          }
+        }
+      }
+    `;
+    const endpoint = getBufferEndpoint();
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { input: { id: postId.trim() } },
+      }),
+    });
+    const data = await res.json();
+    if (data.errors && data.errors.length > 0) {
+      return { success: false, error: data.errors[0]?.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
+}
+
+/**
+ * Cancels/deletes scheduled posts across channels in Buffer
+ */
+export async function deleteFromAllBufferChannels(
+  accessToken: string,
+  postIds?: string[]
+): Promise<void> {
+  if (!postIds || postIds.length === 0) return;
+  await Promise.allSettled(
+    postIds.map(id => deletePostFromBuffer(accessToken, id))
+  );
+}
+
+/**
+ * Reschedules an existing scheduled post in Buffer to a new dueAt timestamp
+ */
+export async function rescheduleBufferPost(
+  accessToken: string,
+  postId: string,
+  dueAt: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const mutation = `
+      mutation EditPost($input: EditPostInput!) {
+        editPost(input: $input) {
+          ... on PostActionSuccess {
+            post {
+              id
+            }
+          }
+          ... on UnexpectedError {
+            message
+          }
+        }
+      }
+    `;
+    const endpoint = getBufferEndpoint();
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query: mutation,
+        variables: { input: { id: postId.trim(), dueAt, mode: 'customScheduled' } },
+      }),
+    });
+    const data = await res.json();
+    if (data.errors && data.errors.length > 0) {
+      return { success: false, error: data.errors[0]?.message };
+    }
+    return { success: true };
+  } catch (err: any) {
+    return { success: false, error: err?.message || String(err) };
+  }
 }

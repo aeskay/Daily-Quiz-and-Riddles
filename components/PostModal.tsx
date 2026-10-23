@@ -8,13 +8,14 @@ import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
-import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate } from '../services/socialService';
+import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate, unqueuePost, findNextAvailableSlotDate } from '../services/socialService';
 import { dispatchPostDirectly, buildSocialCaption, parseWyr, stripHookFromQuestion } from '../services/socialDirectService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
 
 interface PostModalProps {
   post: QuizPost | null;
+  allPosts?: QuizPost[];
   onClose: () => void;
   onPostUpdated?: (updated: QuizPost) => void;
 }
@@ -221,7 +222,7 @@ const Canvas1000: React.FC<Canvas1000Props> = ({
 
 // ── Main PostModal Component ───────────────────────────────────────────────────
 
-const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) => {
+const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUpdated }) => {
   const [selectedLayout, setSelectedLayout] = useState<LayoutType>('auto');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [vectorCandidates, setVectorCandidates] = useState<string[]>([]);
@@ -231,6 +232,21 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
   const [queueSuccess, setQueueSuccess] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
   const [postNowStatus, setPostNowStatus] = useState<string | null>(null);
+
+  // Compute the projected next available slot label if this post is queued
+  const nextSlotLabel = React.useMemo(() => {
+    if (!post || post.scheduleStatus === 'queued') return null;
+    try {
+      const social = getLocalSocialConfig();
+      const occupied = (allPosts || [])
+        .filter(p => p.scheduleStatus === 'queued' && p.scheduledTime)
+        .map(p => p.scheduledTime as string);
+      const slotDate = findNextAvailableSlotDate(social.scheduleTimes, occupied, post.id);
+      return getQueuedScheduleInfo({ ...post, scheduledTime: slotDate.toISOString() }).label;
+    } catch {
+      return null;
+    }
+  }, [post?.id, post?.scheduleStatus, allPosts]);
   
   // Editable fields
   const [contextText, setContextText] = useState('');
@@ -457,13 +473,27 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
       const postToQueue = getUpdatedPost(storageUrl);
-      const res = await queuePostForAutopost(post.userId, postToQueue, storageUrl);
+      const res = await queuePostForAutopost(post.userId, postToQueue, storageUrl, undefined, allPosts);
       setQueueSuccess(true);
       onPostUpdated?.(res.post);
       setTimeout(() => setQueueSuccess(false), 3000);
     } catch (err: any) {
       console.error("Queue error:", err);
       alert("Failed to queue post: " + (err?.message || err));
+    } finally {
+      setIsQueueing(false);
+    }
+  };
+
+  const handleUnqueue = async () => {
+    if (!post?.userId) return;
+    setIsQueueing(true);
+    try {
+      const updated = await unqueuePost(post.userId, post);
+      onPostUpdated?.(updated);
+    } catch (err: any) {
+      console.error("Unqueue error:", err);
+      alert("Failed to unqueue post: " + (err?.message || err));
     } finally {
       setIsQueueing(false);
     }
@@ -480,7 +510,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
       const postToPost = getUpdatedPost(storageUrl);
-      const queued = await queuePostForAutopost(post.userId, postToPost, storageUrl);
+      const queued = await queuePostForAutopost(post.userId, postToPost, storageUrl, undefined, allPosts);
       setPostNowStatus("Publishing to socials...");
 
       const config = getLocalSocialConfig();
@@ -689,14 +719,37 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
             {post.userId && (
               <div className="w-full flex flex-col gap-2 pt-2 border-t border-zinc-900">
                 <div className="flex gap-2 flex-wrap sm:flex-nowrap">
-                  <button
-                    onClick={handleQueueForAutopost}
-                    disabled={isQueueing}
-                    className={`flex-1 min-w-[120px] py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${post.scheduleStatus === 'queued' || queueSuccess ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white'}`}
-                  >
-                    {isQueueing ? <Loader2 size={14} className="animate-spin" /> : (queueSuccess ? <Check size={14} /> : <Clock size={14} />)}
-                    {queueSuccess || post.scheduleStatus === 'queued' ? 'Queued' : 'Queue Autopost'}
-                  </button>
+                  {post.scheduleStatus === 'queued' ? (
+                    <div className="flex-1 flex gap-1.5 min-w-[140px]">
+                      <button
+                        type="button"
+                        disabled
+                        className="flex-1 py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                      >
+                        <Check size={14} /> Queued
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleUnqueue}
+                        disabled={isQueueing}
+                        className="py-2.5 sm:py-3 px-3.5 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border bg-zinc-900 hover:bg-red-500/20 border-zinc-800 hover:border-red-500/40 text-zinc-300 hover:text-red-400 transition-all shrink-0"
+                        title="Remove from autopost queue"
+                      >
+                        {isQueueing ? <Loader2 size={14} className="animate-spin" /> : 'Unqueue'}
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={handleQueueForAutopost}
+                      disabled={isQueueing}
+                      className={`flex-1 min-w-[140px] py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${queueSuccess ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white'}`}
+                      title={nextSlotLabel ? `Queue for ${nextSlotLabel}` : 'Queue Autopost'}
+                    >
+                      {isQueueing ? <Loader2 size={14} className="animate-spin" /> : (queueSuccess ? <Check size={14} /> : <Clock size={14} />)}
+                      {queueSuccess ? 'Queued!' : `Queue Autopost${nextSlotLabel ? ` (${nextSlotLabel})` : ''}`}
+                    </button>
+                  )}
                   <button
                     onClick={handlePostNow}
                     disabled={isPostingNow}
