@@ -32,14 +32,6 @@ interface SocialSettings {
 }
 
 function buildCaption(post: any): string {
-  const parts = (post.visual_text || "").split(" | ");
-  let body = "";
-  if (parts.length > 1) {
-    body = `${parts[0]}\n\n${parts.slice(1).join("\n\n")}`;
-  } else {
-    body = post.visual_text || "";
-  }
-
   const category = post.category || '';
   let header = '🧠 QUIZ';
   if (category === 'Riddles') header = '🧩 RIDDLE';
@@ -52,7 +44,30 @@ function buildCaption(post: any): string {
   else if (category === 'Would you rather') header = '💭 WOULD YOU RATHER?';
   else if (category) header = `🧠 ${category.toUpperCase()}`;
 
-  return `${header}\n\n${body}`;
+  if (category === 'Would you rather') {
+    return `${header}\n\nWhich one are you choosing?`;
+  }
+
+  if (post.caption_hook && post.caption_hook.trim()) {
+    return `${header}\n\n${post.caption_hook.trim()}`;
+  }
+
+  const hookPattern = /^(only\s+\d+%\s+[^.?!:]+[.?!:]*|99%\s+[^.?!:]+[.?!:]*|can\s+you\s+(solve|figure|answer)[^.?!:]+[.?!:]*|brain[- ]?teaser\s*:?|riddle\s+me\s+this\s*:?|most\s+people\s+get\s+this\s+wrong[.?!:]*|test\s+your\s+iq\s*:?|solve\s+this\s+if\s+you\s+can\s*:?)/i;
+  const match = (post.visual_text || '').match(hookPattern);
+  if (match) {
+    return `${header}\n\n${match[0].trim()}`;
+  }
+
+  let defaultHook = 'Can you solve this?';
+  if (category === 'Riddles') defaultHook = 'Only 5% can solve this riddle on the first try — can you?';
+  else if (category === 'Logic & Math') defaultHook = "Only 1% can solve this fast — what's your answer?";
+  else if (category === 'General Knowledge') defaultHook = 'Most people get this wrong — do you know the answer?';
+  else if (category === 'Science & Tech') defaultHook = 'Mind-blowing trivia of the day — can you guess it?';
+  else if (category === 'Language & Literature') defaultHook = 'Wordplay test — can you figure this out?';
+  else if (category === 'Nature & Animals') defaultHook = 'Crazy nature trivia — do you know this one?';
+  else if (category === 'Psychology') defaultHook = 'Your brain might trick you on this one — what do you think?';
+
+  return `${header}\n\n${defaultHook}`;
 }
 
 async function dispatchPostToSocials(

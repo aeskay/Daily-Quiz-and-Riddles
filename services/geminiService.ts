@@ -62,6 +62,7 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
 const POST_SCHEMA = {
   type: Type.OBJECT,
   properties: {
+    caption_hook:      { type: Type.STRING },
     visual_text:       { type: Type.STRING },
     read_more_content: { type: Type.STRING },
     answer:            { type: Type.STRING },

@@ -13,6 +13,8 @@ export enum Category {
 
 export interface QuizPost {
   id: string;
+  /** Short punchy viral teaser for social media caption (e.g. "Only 1% can solve this fast!") */
+  caption_hook?: string;
   /** For normal posts: "Context text | Question text" or just "Question text"
    *  For Would You Rather: "Option A | Option B"
    */

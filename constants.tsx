@@ -58,9 +58,16 @@ If a question feels like something a teacher would put on a chemistry or physics
    - NEVER put science trivia under Riddles!
 
 ### FORMATTING:
+- caption_hook:
+  - Short, punchy 1-sentence viral hook used for the social media post caption (e.g. "Only 1% can solve this fast!", "Order of operations trap — what is your answer?", "Which side are you on?", "Mind-blowing trivia of the day!").
+  - NEVER repeat the full question here! Keep it as a punchy teaser.
 - visual_text:
-  - Format as "Viral hook sentence. | Short punchy question?" or just a punchy "Question?"
+  - The clean puzzle or question rendered on the image card.
+  - NEVER put "Only 1% can solve this" or "Viral hook" in visual_text! That belongs in caption_hook!
+  - For standard questions: just the clean question (e.g. "A man is alone in a room with a table, chair, and an apple. How does he get out?").
+  - If setup context is needed, use pipe: "Context sentence | Question text?"
+  - FOR "WOULD YOU RATHER": visual_text MUST ALWAYS BE: "Option A text | Option B text" (e.g. "Only be able to whisper | Only be able to shout"). NEVER include "Would you rather" or "Option A" in visual_text!
 - answer: Clear, punchy answer revealing the twist.
-- read_more_content: 1-2 sentence snappy explanation of why people got tricked, ending with an invitation to comment.
+- read_more_content: 1-2 sentence snappy explanation of the logic or fun fact.
 - image_keyword: 1-2 simple, concrete nouns for a clean transparent icon (e.g. "runner", "calculator", "hippo", "banana", "pyramid", "traffic light").
 `;

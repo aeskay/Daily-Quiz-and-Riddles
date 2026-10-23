@@ -24,7 +24,7 @@ import {
 } from './services/firestoreService';
 import * as db from './services/dbService';
 import { getLocalSocialConfig } from './services/socialService';
-import { dispatchPostDirectly } from './services/socialDirectService';
+import { dispatchPostDirectly, parseWyr, stripHookFromQuestion } from './services/socialDirectService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -624,9 +624,19 @@ const App: React.FC = () => {
               <div className="pb-40">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
                   {filteredPosts.map((post) => {
-                    const parts = post.visual_text.split('|').map(s => s.trim());
-                    const context = parts.length > 1 ? parts[0] : null;
-                    const question = parts.length > 1 ? parts[1] : parts[0];
+                    let context: string | null = null;
+                    let question = '';
+
+                    if (post.category === 'Would you rather') {
+                      const { optionA, optionB } = parseWyr(post.visual_text || '');
+                      context = optionA ? `Option A: ${optionA}` : null;
+                      question = optionB ? `Option B: ${optionB}` : optionA;
+                    } else {
+                      const { cleanQuestion } = stripHookFromQuestion(post.visual_text || '');
+                      const parts = (cleanQuestion || post.visual_text || '').split('|').map(s => s.trim());
+                      context = parts.length > 1 ? parts[0] : null;
+                      question = parts.length > 1 ? parts.slice(1).join(' | ') : parts[0];
+                    }
 
                     return (
                       <div key={post.id} className="group relative">

@@ -9,7 +9,7 @@ import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
 import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig } from '../services/socialService';
-import { dispatchPostDirectly, buildSocialCaption } from '../services/socialDirectService';
+import { dispatchPostDirectly, buildSocialCaption, parseWyr, stripHookFromQuestion } from '../services/socialDirectService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
 
@@ -187,21 +187,30 @@ const Canvas1000: React.FC<Canvas1000Props> = ({
   }
 
   // ── Layout 4: Would You Rather ───────────────────────────────────────────────
+  const lenA = (contextText || '').length;
+  const fontA = lenA > 110 ? '26px' : lenA > 70 ? '30px' : lenA > 40 ? '34px' : '38px';
+  const lenB = (questionText || '').length;
+  const fontB = lenB > 110 ? '26px' : lenB > 70 ? '30px' : lenB > 40 ? '34px' : '38px';
+
   return (
     <div style={{ width: '1000px', height: '1000px', padding: '80px', position: 'relative', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }} className="bg-white select-none">
-      <h2 style={{ fontSize: '48px', fontWeight: 900, color: '#0B3C68', textAlign: 'center', marginBottom: '50px' }}>
+      <h2 style={{ fontSize: '48px', fontWeight: 900, color: '#0B3C68', textAlign: 'center', marginBottom: '45px' }}>
         Would You Rather?
       </h2>
 
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: '30px', flex: 1, maxHeight: '460px', marginBottom: '80px' }}>
-        <div style={{ flex: 1, backgroundColor: '#0F4C81', color: 'white', borderRadius: '36px', padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <p style={{ fontSize: '38px', fontWeight: 700, lineHeight: 1.35, margin: 0 }}>{contextText || 'Option A'}</p>
+      <div style={{ display: 'flex', alignItems: 'stretch', gap: '30px', flex: 1, maxHeight: '480px', marginBottom: '80px' }}>
+        <div style={{ flex: 1, backgroundColor: '#0F4C81', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+          <p style={{ fontSize: fontA, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
+            {contextText || 'Option A'}
+          </p>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
           <span style={{ fontSize: '26px', fontWeight: 900, color: '#94a3b8', padding: '10px' }}>OR</span>
         </div>
-        <div style={{ flex: 1, backgroundColor: '#D92D46', color: 'white', borderRadius: '36px', padding: '40px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <p style={{ fontSize: '38px', fontWeight: 700, lineHeight: 1.35, margin: 0 }}>{questionText || 'Option B'}</p>
+        <div style={{ flex: 1, backgroundColor: '#D92D46', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+          <p style={{ fontSize: fontB, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
+            {questionText || 'Option B'}
+          </p>
         </div>
       </div>
 
@@ -283,14 +292,24 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
   // Sync state only when the active post ID changes
   useEffect(() => {
     if (!post) return;
-    const parts = (post.visual_text || '').split('|').map(s => s.trim());
-    if (parts.length > 1) {
-      setContextText(parts[0]);
-      setQuestionText(parts[1]);
+
+    if (post.category === 'Would you rather') {
+      const { optionA, optionB } = parseWyr(post.visual_text || '');
+      setContextText(optionA);
+      setQuestionText(optionB);
     } else {
-      setContextText('');
-      setQuestionText(parts[0] || '');
+      const { cleanQuestion } = stripHookFromQuestion(post.visual_text || '');
+      const textToUse = cleanQuestion || post.visual_text || '';
+      const parts = textToUse.split('|').map(s => s.trim());
+      if (parts.length > 1) {
+        setContextText(parts[0]);
+        setQuestionText(parts.slice(1).join(' | '));
+      } else {
+        setContextText('');
+        setQuestionText(parts[0] || '');
+      }
     }
+
     const kw = post.image_keyword || post.category;
     setCustomKeyword(kw);
     setSelectedLayout('auto');
@@ -755,7 +774,9 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
               {isEditing && (
                 <div className="space-y-3 pt-2">
                   <div>
-                    <label className="text-[11px] text-zinc-400 block mb-1">Context Setup (Top, Navy)</label>
+                    <label className="text-[11px] text-zinc-400 block mb-1">
+                      {post.category === 'Would you rather' ? 'Option A (Left Blue Box)' : 'Context Setup (Top, Navy)'}
+                    </label>
                     <textarea
                       rows={2}
                       value={contextText}
@@ -764,7 +785,9 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                     />
                   </div>
                   <div>
-                    <label className="text-[11px] text-zinc-400 block mb-1">Question / Highlight (Red)</label>
+                    <label className="text-[11px] text-zinc-400 block mb-1">
+                      {post.category === 'Would you rather' ? 'Option B (Right Red Box)' : 'Question / Highlight (Red)'}
+                    </label>
                     <textarea
                       rows={2}
                       value={questionText}
