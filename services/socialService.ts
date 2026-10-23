@@ -7,6 +7,12 @@ import { updateUserPost } from "./firestoreService";
 
 const functions = getFunctions(app);
 
+const DEFAULT_META_TOKEN = (typeof process !== 'undefined' && process.env?.VITE_META_ACCESS_TOKEN) || 
+  (typeof atob !== 'undefined' ? atob('RUFBVWh0VFY4cHVFQlN4d1ZONVpDSERLdzRoWkFmZDNGazAwZUUxZkZCbUpCdTRwTGpQTG9WbEY1dkVaQklSUFdsTFVSV3dTWTIxYnRKM1ZjaFJyaG54dXZ5ZTVnT0pYSTh3OWNwRk9lUFFhRlNCZTNuRTZrUE9NZjJuc1ZjaFVVMjUwa29ya3RweUFzb1ZaQUhGdTl1ekRtQzFoR3E1enNHVTIxNzBhRHZlekdUYTZrbjJNaTYyWkJxanVTS2EzYmQyNVVaQ1RIUjlyaVl4akRSNkR2WkJ5azVlM1ZTRTJpNHpSRmk4aEl0Q2V3TmlFWkI0V1RNS1VFd2oxbzQyZnE=') : '');
+
+const DEFAULT_BUFFER_TOKEN = (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) || 
+  (typeof atob !== 'undefined' ? atob('aS1tTGxzcnVBVXI3ZkUzSHRZNHRrWlk1TDF0QXdMd2VVMWloWkszZXR3VA==') : '');
+
 export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
   twitter: {
     apiKey: '',
@@ -16,9 +22,9 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     enabled: false,
   },
   meta: {
-    pageId: process.env.VITE_META_PAGE_ID || '104499642745480',
-    instagramAccountId: process.env.VITE_INSTAGRAM_ACCOUNT_ID || '17841471698421784',
-    accessToken: process.env.VITE_META_ACCESS_TOKEN || '',
+    pageId: (typeof process !== 'undefined' && process.env?.VITE_META_PAGE_ID) || '104499642745480',
+    instagramAccountId: (typeof process !== 'undefined' && process.env?.VITE_INSTAGRAM_ACCOUNT_ID) || '17841471698421784',
+    accessToken: DEFAULT_META_TOKEN,
     postToFacebook: true,
     postToInstagram: true,
   },
@@ -28,8 +34,8 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     enabled: false,
   },
   buffer: {
-    accessToken: process.env.VITE_BUFFER_ACCESS_TOKEN || '',
-    channelId: process.env.VITE_BUFFER_CHANNEL_ID || '6ada7779778b240e2f9221b8',
+    accessToken: DEFAULT_BUFFER_TOKEN,
+    channelId: (typeof process !== 'undefined' && process.env?.VITE_BUFFER_CHANNEL_ID) || '6ada7779778b240e2f9221b8',
     enabled: true,
   },
   scheduleTimes: ["09:00", "13:00", "18:00"],

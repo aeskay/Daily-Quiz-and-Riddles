@@ -9,7 +9,7 @@ import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
 import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig } from '../services/socialService';
-import { dispatchPostDirectly } from '../services/socialDirectService';
+import { dispatchPostDirectly, buildSocialCaption } from '../services/socialDirectService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
 
@@ -492,9 +492,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
   };
 
   const handleShareToTwitter = () => {
-    const parts = (post.visual_text || '').split(' | ');
-    const body = parts.length > 1 ? `${parts[0]}\n\n${parts.slice(1).join('\n\n')}` : (post.visual_text || '');
-    const tweetText = `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!`;
+    const tweetText = buildSocialCaption(post);
     const tweetUrl = `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`;
     window.open(tweetUrl, '_blank', 'noopener,noreferrer');
   };

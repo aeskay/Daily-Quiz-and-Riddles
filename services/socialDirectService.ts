@@ -2,6 +2,29 @@ import { QuizPost, SocialConfig } from "../types";
 import { updateUserPost } from "./firestoreService";
 import { postToBuffer } from "./bufferService";
 
+export function getCategoryHeader(category?: string): string {
+  switch (category) {
+    case 'Riddles':
+      return '🧩 RIDDLE';
+    case 'Logic & Math':
+      return '🔢 LOGIC & MATH PUZZLE';
+    case 'General Knowledge':
+      return '💡 GENERAL KNOWLEDGE QUIZ';
+    case 'Science & Tech':
+      return '🔬 SCIENCE & TECH QUIZ';
+    case 'Language & Literature':
+      return '📚 LANGUAGE & LITERATURE QUIZ';
+    case 'Nature & Animals':
+      return '🌿 NATURE & ANIMALS TRIVIA';
+    case 'Psychology':
+      return '🧠 PSYCHOLOGY TRIVIA';
+    case 'Would you rather':
+      return '💭 WOULD YOU RATHER?';
+    default:
+      return category ? `🧠 ${category.toUpperCase()}` : '🧠 QUIZ';
+  }
+}
+
 /**
  * Builds standard social caption
  */
@@ -14,7 +37,8 @@ export function buildSocialCaption(post: QuizPost): string {
     body = post.visual_text || "";
   }
 
-  return `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!`;
+  const header = getCategoryHeader(post.category);
+  return `${header}\n\n${body}`;
 }
 
 /**
@@ -243,7 +267,7 @@ export interface SocialTestResult {
  */
 export async function testAllSocialIntegrations(social: SocialConfig): Promise<SocialTestResult[]> {
   const results: SocialTestResult[] = [];
-  const testCaption = `🧠 DAILY QUIZ & RIDDLES\n\nI speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?\n\n👇 Drop your guess in the comments!`;
+  const testCaption = `🧩 RIDDLE\n\nI speak without a mouth and hear without ears. I have no body, but I come alive with wind. What am I?`;
   
   // Use our proven high-res Meta image
   let cdnUrl = 'https://scontent-dfw5-2.xx.fbcdn.net/v/t39.30808-6/365467817_114353981749580_8926697481991324250_n.png?_nc_cat=104&ccb=1-7&_nc_sid=585619&_nc_ohc=pEo2ALjso2AQ7kNvwG4aQBi&_nc_oc=AdoWLgnf8ztlvUWPNlXyMdlikUBRcexaiW9oY0aMtL4vC1egl1fUeU9jXFTbje71SiY&_nc_zt=23&_nc_ht=scontent-dfw5-2.xx&edm=AId9v20EAAAA&_nc_gid=SjAXKmiQTnB6qRqCtVhiSg&_nc_tpa=Q5bMBQLYbPa-AFpguGRIUH_AvaH4AFtQ_nweV-F9u1h2R_g09VmMnXqVY24x07CXE_zRn_uehJOVyKIheA&oh=00_AQOYLei3aPw2csbgKv2MIUfLmqkKWmBidebD-HCZ1HlaXQ&oe=6AE0694C';

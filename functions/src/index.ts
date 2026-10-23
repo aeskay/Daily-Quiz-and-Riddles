@@ -32,7 +32,19 @@ function buildCaption(post: any): string {
     body = post.visual_text || "";
   }
 
-  return `🧠 DAILY QUIZ & RIDDLES\n\n${body}\n\n👇 Drop your guess in the comments!`;
+  const category = post.category || '';
+  let header = '🧠 QUIZ';
+  if (category === 'Riddles') header = '🧩 RIDDLE';
+  else if (category === 'Logic & Math') header = '🔢 LOGIC & MATH PUZZLE';
+  else if (category === 'General Knowledge') header = '💡 GENERAL KNOWLEDGE QUIZ';
+  else if (category === 'Science & Tech') header = '🔬 SCIENCE & TECH QUIZ';
+  else if (category === 'Language & Literature') header = '📚 LANGUAGE & LITERATURE QUIZ';
+  else if (category === 'Nature & Animals') header = '🌿 NATURE & ANIMALS TRIVIA';
+  else if (category === 'Psychology') header = '🧠 PSYCHOLOGY TRIVIA';
+  else if (category === 'Would you rather') header = '💭 WOULD YOU RATHER?';
+  else if (category) header = `🧠 ${category.toUpperCase()}`;
+
+  return `${header}\n\n${body}`;
 }
 
 /**
