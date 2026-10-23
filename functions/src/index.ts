@@ -1,27 +1,21 @@
 import { onSchedule } from "firebase-functions/v2/scheduler";
 import { onCall, HttpsError } from "firebase-functions/v2/https";
 import * as admin from "firebase-admin";
-import { postToTwitter, TwitterCredentials } from "./services/twitter";
-import { postToBuffer, BufferCredentials } from "./services/buffer";
-import { postToFacebook, postToInstagram, MetaCredentials } from "./services/meta";
-import { postToTikTok, TikTokCredentials } from "./services/tiktok";
+import { postToAllBufferChannels, BufferCredentials } from "./services/buffer";
 
 admin.initializeApp();
 const db = admin.firestore();
 
 interface SocialSettings {
-  twitter?: TwitterCredentials & { enabled: boolean };
-  buffer?: BufferCredentials;
-  meta?: MetaCredentials & { postToFacebook: boolean; postToInstagram: boolean };
-  tiktok?: TikTokCredentials & { enabled: boolean };
-  scheduleTimes?: string[]; // e.g. ["09:00", "13:00", "18:00"]
+  buffer?: BufferCredentials & { enabled: boolean };
+  scheduleTimes?: string[];
   timezone?: string;
   autopostEnabled?: boolean;
   lastPostedAt?: number;
 }
 
 /**
- * Builds an engaging caption for Twitter, Instagram, Facebook, and TikTok
+ * Builds an engaging caption for social channels
  */
 function buildCaption(post: any): string {
   const category = post.category || '';
@@ -63,7 +57,7 @@ function buildCaption(post: any): string {
 }
 
 /**
- * Dispatches a post to all configured platforms
+ * Dispatches a post to all configured platforms via Buffer
  */
 async function dispatchPostToSocials(
   postDocRef: admin.firestore.DocumentReference,
@@ -76,65 +70,22 @@ async function dispatchPostToSocials(
   }
 
   const caption = buildCaption(postData);
-  const platforms: string[] = [];
-  const errors: string[] = [];
+  const bufferToken =
+    social.buffer?.accessToken ||
+    process.env.BUFFER_ACCESS_TOKEN ||
+    "i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT";
 
-  // 1. Post to Twitter / X (via Buffer or direct Twitter API)
-  if (social.buffer?.enabled && social.buffer.accessToken) {
-    const res = await postToBuffer(social.buffer, caption);
-    if (res.success) {
-      platforms.push("Twitter (via Buffer)");
-    } else if (res.error) {
-      errors.push(`Twitter (Buffer): ${res.error}`);
-    }
-  } else if (social.twitter?.enabled && social.twitter.apiKey) {
-    const res = await postToTwitter(social.twitter, caption, imageUrl);
-    if (res.success) {
-      platforms.push("twitter");
-    } else if (res.error) {
-      errors.push(`Twitter: ${res.error}`);
-    }
-  }
+  const res = await postToAllBufferChannels(bufferToken, caption, imageUrl, "shareNow");
 
-  // 2. Post to Facebook Page
-  if (social.meta?.postToFacebook && social.meta.pageId) {
-    const res = await postToFacebook(social.meta, caption, imageUrl);
-    if (res.success) {
-      platforms.push("facebook");
-    } else if (res.error) {
-      errors.push(`Facebook: ${res.error}`);
-    }
-  }
-
-  // 3. Post to Instagram Professional/Creator
-  if (social.meta?.postToInstagram && social.meta.instagramAccountId) {
-    const res = await postToInstagram(social.meta, caption, imageUrl);
-    if (res.success) {
-      platforms.push("instagram");
-    } else if (res.error) {
-      errors.push(`Instagram: ${res.error}`);
-    }
-  }
-
-  // 4. Post to TikTok
-  if (social.tiktok?.enabled && social.tiktok.accessToken) {
-    const res = await postToTikTok(social.tiktok, caption, imageUrl);
-    if (res.success) {
-      platforms.push("tiktok");
-    } else if (res.error) {
-      errors.push(`TikTok: ${res.error}`);
-    }
-  }
-
-  const isSuccess = platforms.length > 0;
+  const isSuccess = res.platforms.length > 0;
   await postDocRef.update({
     scheduleStatus: isSuccess ? "posted" : "failed",
     postedAt: isSuccess ? Date.now() : null,
-    postedPlatforms: platforms,
-    postError: errors.length > 0 ? errors.join(" | ") : null,
+    postedPlatforms: res.platforms,
+    postError: res.errors.length > 0 ? res.errors.join(" | ") : null,
   });
 
-  return { success: isSuccess, platforms, errors };
+  return { success: isSuccess, platforms: res.platforms, errors: res.errors };
 }
 
 /**
@@ -149,8 +100,6 @@ export const autoPostScheduler = onSchedule(
   async () => {
     console.log("Checking autopost schedule...");
     const now = new Date();
-    const currentHours = String(now.getHours()).padStart(2, "0");
-    const currentMinutes = now.getMinutes();
 
     // Query users collection for those who configured autopost
     const usersSnap = await db.collection("users").get();

@@ -8,7 +8,7 @@ import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
-import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig } from '../services/socialService';
+import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate } from '../services/socialService';
 import { dispatchPostDirectly, buildSocialCaption, parseWyr, stripHookFromQuestion } from '../services/socialDirectService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
@@ -240,6 +240,23 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
 
   const exportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const previewWrapperRef = useRef<HTMLDivElement>(null);
+  const [previewSize, setPreviewSize] = useState(380);
+
+  useEffect(() => {
+    const updateSize = () => {
+      if (previewWrapperRef.current) {
+        const available = previewWrapperRef.current.clientWidth;
+        if (available > 0) {
+          const target = Math.min(380, Math.max(260, available - 16));
+          setPreviewSize(target);
+        }
+      }
+    };
+    updateSize();
+    window.addEventListener('resize', updateSize);
+    return () => window.removeEventListener('resize', updateSize);
+  }, []);
 
 
   // Helper to compile the current post state including edited text and selected image
@@ -440,9 +457,9 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
       const postToQueue = getUpdatedPost(storageUrl);
-      const queued = await queuePostForAutopost(post.userId, postToQueue, storageUrl);
+      const res = await queuePostForAutopost(post.userId, postToQueue, storageUrl);
       setQueueSuccess(true);
-      onPostUpdated?.(queued);
+      onPostUpdated?.(res.post);
       setTimeout(() => setQueueSuccess(false), 3000);
     } catch (err: any) {
       console.error("Queue error:", err);
@@ -558,10 +575,36 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
         onClick={(e) => e.stopPropagation()}
       >
         {/* ── Left Preview Panel ─────────────────────────────────────────────────── */}
-        <div className="w-full md:w-[470px] bg-zinc-950 p-6 md:p-8 border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col items-center justify-between gap-5 overflow-y-auto">
+        <div className="w-full md:w-[470px] bg-zinc-950 p-4 sm:p-6 md:p-8 border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col items-center justify-between gap-4 sm:gap-5 overflow-y-auto">
           
+          {/* Scheduled / Posted Status Notification */}
+          {post.scheduleStatus === 'queued' && (
+            <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-between">
+              <span className="flex items-center gap-1.5 truncate">
+                <Clock size={13} className="text-amber-400 shrink-0" />
+                <span className="truncate">Scheduled: {getQueuedScheduleInfo(post).label}</span>
+              </span>
+              <span className="text-[10px] font-mono text-amber-400 uppercase bg-amber-500/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
+                QUEUED
+              </span>
+            </div>
+          )}
+          {post.scheduleStatus === 'posted' && (
+            <div className="w-full px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center justify-between">
+              <span className="flex items-center gap-1.5 truncate">
+                <Check size={13} className="text-emerald-400 shrink-0" />
+                <span className="truncate">Published: {formatPostedDate(post.postedAt)}</span>
+              </span>
+              {post.postedPlatforms && post.postedPlatforms.length > 0 && (
+                <span className="text-[9px] font-mono text-emerald-300 bg-emerald-500/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
+                  {post.postedPlatforms.join(', ')}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Layout Selector Pills */}
-          <div className="w-full flex items-center justify-center gap-1.5 bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 text-[11px] font-bold">
+          <div className="w-full flex items-center justify-center gap-1.5 bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 text-[11px] font-bold overflow-x-auto">
             <button
               onClick={() => setSelectedLayout('auto')}
               className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'auto' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
@@ -588,9 +631,12 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
             </button>
           </div>
 
-          {/* Exportable Square Post Card Container (Scaled 1000px -> 380px) */}
-          <div className="w-full flex items-center justify-center py-2">
-            <div className="w-[380px] h-[380px] rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 relative bg-white">
+          {/* Exportable Square Post Card Container (Scaled dynamically to previewSize) */}
+          <div ref={previewWrapperRef} className="w-full flex items-center justify-center py-1 sm:py-2">
+            <div 
+              style={{ width: `${previewSize}px`, height: `${previewSize}px` }}
+              className="rounded-3xl overflow-hidden shadow-2xl border border-zinc-200 relative bg-white shrink-0"
+            >
               {imageLoading && (
                 <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center z-20">
                   <div className="flex flex-col items-center gap-2">
@@ -600,13 +646,13 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                 </div>
               )}
 
-              {/* The full-res 1000x1000 canvas scaled cleanly to 380px */}
+              {/* The full-res 1000x1000 canvas scaled cleanly */}
               <div
                 ref={exportRef}
                 style={{
                   width: '1000px',
                   height: '1000px',
-                  transform: 'scale(0.38)',
+                  transform: `scale(${previewSize / 1000})`,
                   transformOrigin: 'top left',
                 }}
               >
@@ -622,39 +668,39 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
 
           {/* Bottom Action Bar */}
           <div className="w-full flex flex-col gap-3">
-            <div className="w-full flex items-center gap-3">
+            <div className="w-full flex items-center gap-2 sm:gap-3">
               <button
                 onClick={handleDownload}
-                className="flex-1 bg-white hover:bg-zinc-100 text-black font-black py-3.5 px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 text-sm shadow-md"
+                className="flex-1 bg-white hover:bg-zinc-100 text-black font-black py-3 sm:py-3.5 px-3 sm:px-4 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-95 text-xs sm:text-sm shadow-md"
               >
-                <Download size={18} /> Download Post (1500px)
+                <Download size={16} /> Download (1500px)
               </button>
               <button
                 onClick={handleShare}
                 disabled={isSharing}
-                className="p-3.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl transition-all active:scale-95 disabled:opacity-50 shadow-md"
+                className="p-3 sm:p-3.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-2xl transition-all active:scale-95 disabled:opacity-50 shadow-md shrink-0"
                 title="Share"
               >
-                {isSharing ? <Loader2 size={18} className="animate-spin" /> : <Share2 size={18} />}
+                {isSharing ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
               </button>
             </div>
 
             {/* Social Autopost & Queue Buttons */}
             {post.userId && (
               <div className="w-full flex flex-col gap-2 pt-2 border-t border-zinc-900">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap sm:flex-nowrap">
                   <button
                     onClick={handleQueueForAutopost}
                     disabled={isQueueing}
-                    className={`flex-1 py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 border transition-all ${post.scheduleStatus === 'queued' || queueSuccess ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white'}`}
+                    className={`flex-1 min-w-[120px] py-2.5 sm:py-3 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border transition-all ${post.scheduleStatus === 'queued' || queueSuccess ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400' : 'bg-zinc-900 hover:bg-zinc-800 border-zinc-800 text-white'}`}
                   >
                     {isQueueing ? <Loader2 size={14} className="animate-spin" /> : (queueSuccess ? <Check size={14} /> : <Clock size={14} />)}
-                    {queueSuccess || post.scheduleStatus === 'queued' ? 'Queued for Autopost' : 'Queue for Autopost'}
+                    {queueSuccess || post.scheduleStatus === 'queued' ? 'Queued' : 'Queue Autopost'}
                   </button>
                   <button
                     onClick={handlePostNow}
                     disabled={isPostingNow}
-                    className="py-3 px-4 bg-[#0477CF] hover:bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50"
+                    className="py-2.5 sm:py-3 px-3.5 bg-[#0477CF] hover:bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 disabled:opacity-50 shrink-0"
                     title="Publish to enabled socials"
                   >
                     {isPostingNow ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
@@ -663,7 +709,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
                   <button
                     onClick={handleShareToTwitter}
                     type="button"
-                    className="py-3 px-3.5 bg-zinc-900 hover:bg-black border border-zinc-700 hover:border-zinc-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95"
+                    className="py-2.5 sm:py-3 px-3.5 bg-zinc-900 hover:bg-black border border-zinc-700 hover:border-zinc-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 shrink-0"
                     title="Share on X"
                   >
                     𝕏 Tweet
@@ -680,18 +726,18 @@ const PostModal: React.FC<PostModalProps> = ({ post, onClose, onPostUpdated }) =
         </div>
 
         {/* ── Right Controls & Details Panel ────────────────────────────────────── */}
-        <div className="flex-1 p-6 md:p-8 flex flex-col justify-between overflow-y-auto space-y-6">
-          <div className="space-y-6">
+        <div className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col justify-between overflow-y-auto space-y-4 sm:space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {/* Header */}
             <div className="flex justify-between items-start">
               <div>
                 <span className="text-[10px] font-black uppercase tracking-widest text-[#0477CF] px-2.5 py-1 bg-[#0477CF]/10 rounded-lg">
                   {post.category}
                 </span>
-                <h3 className="text-xl font-bold text-white font-heading mt-2">Post Editor & Vector Tools</h3>
+                <h3 className="text-lg sm:text-xl font-bold text-white font-heading mt-1 sm:mt-2">Post Editor & Vector Tools</h3>
               </div>
               <button onClick={handleClose} className="p-2 text-zinc-500 hover:text-white rounded-xl">
-                <X size={22} />
+                <X size={20} />
               </button>
             </div>
 

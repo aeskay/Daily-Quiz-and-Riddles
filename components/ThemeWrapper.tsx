@@ -10,7 +10,7 @@ const ThemeWrapper: React.FC<ThemeWrapperProps> = ({ children, onClick, styleHin
   return (
     <div 
       onClick={onClick}
-      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-8 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 shadow-sm hover:shadow-xl group"
+      className="relative overflow-hidden rounded-2xl border border-zinc-200 bg-white p-5 sm:p-6 md:p-8 cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:-translate-y-1 shadow-sm hover:shadow-xl group"
       data-style-hint={styleHint}
     >
       {children}

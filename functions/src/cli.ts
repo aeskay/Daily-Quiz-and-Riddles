@@ -1,8 +1,5 @@
 import * as admin from "firebase-admin";
-import { postToTwitter, TwitterCredentials } from "./services/twitter";
-import { postToFacebook, postToInstagram, MetaCredentials } from "./services/meta";
-import { postToTikTok, TikTokCredentials } from "./services/tiktok";
-import { postToBuffer, BufferCredentials } from "./services/buffer";
+import { postToAllBufferChannels, BufferCredentials } from "./services/buffer";
 
 if (process.env.FIREBASE_SERVICE_ACCOUNT) {
   try {
@@ -21,10 +18,7 @@ if (process.env.FIREBASE_SERVICE_ACCOUNT) {
 const db = admin.firestore();
 
 interface SocialSettings {
-  twitter?: TwitterCredentials & { enabled: boolean };
   buffer?: BufferCredentials & { enabled: boolean };
-  meta?: MetaCredentials & { postToFacebook: boolean; postToInstagram: boolean };
-  tiktok?: TikTokCredentials & { enabled: boolean };
   scheduleTimes?: string[];
   timezone?: string;
   autopostEnabled?: boolean;
@@ -81,69 +75,27 @@ async function dispatchPostToSocials(
   }
 
   const caption = buildCaption(postData);
-  const platforms: string[] = [];
-  const errors: string[] = [];
 
-  // 1. Post to Twitter / X (via Buffer if enabled, or direct)
-  if (social.buffer?.enabled && social.buffer.accessToken) {
-    const creds = {
-      accessToken: social.buffer.accessToken,
-      channelId: social.buffer.channelId || "6ada7779778b240e2f9221b8",
-    };
-    const res = await postToBuffer(creds, caption);
-    if (res.success) {
-      platforms.push("twitter (via Buffer)");
-    } else if (res.error) {
-      errors.push(`Twitter (Buffer): ${res.error}`);
-    }
-  } else if (social.twitter?.enabled && social.twitter.apiKey) {
-    const res = await postToTwitter(social.twitter, caption, imageUrl);
-    if (res.success) {
-      platforms.push("twitter");
-    } else if (res.error) {
-      errors.push(`Twitter: ${res.error}`);
-    }
-  }
+  // Single unified Buffer pipeline for all channels:
+  // - Instagram (quiz_riddles_ -> automatically cross-posts to Facebook Page)
+  // - TikTok (quiz_riddles1)
+  // - Twitter / X (quiz_riddles)
+  const bufferToken =
+    social.buffer?.accessToken ||
+    process.env.BUFFER_ACCESS_TOKEN ||
+    "i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT";
 
-  // 2. Post to Facebook Page
-  if (social.meta?.postToFacebook && social.meta.pageId) {
-    const res = await postToFacebook(social.meta, caption, imageUrl);
-    if (res.success) {
-      platforms.push("facebook");
-    } else if (res.error) {
-      errors.push(`Facebook: ${res.error}`);
-    }
-  }
+  const res = await postToAllBufferChannels(bufferToken, caption, imageUrl, "shareNow");
 
-  // 3. Post to Instagram
-  if (social.meta?.postToInstagram && social.meta.instagramAccountId) {
-    const res = await postToInstagram(social.meta, caption, imageUrl);
-    if (res.success) {
-      platforms.push("instagram");
-    } else if (res.error) {
-      errors.push(`Instagram: ${res.error}`);
-    }
-  }
-
-  // 4. Post to TikTok
-  if (social.tiktok?.enabled && social.tiktok.accessToken) {
-    const res = await postToTikTok(social.tiktok, caption, imageUrl);
-    if (res.success) {
-      platforms.push("tiktok");
-    } else if (res.error) {
-      errors.push(`TikTok: ${res.error}`);
-    }
-  }
-
-  const isSuccess = platforms.length > 0;
+  const isSuccess = res.platforms.length > 0;
   await postDocRef.update({
     scheduleStatus: isSuccess ? "posted" : "failed",
     postedAt: isSuccess ? Date.now() : null,
-    postedPlatforms: platforms,
-    postError: errors.length > 0 ? errors.join(" | ") : null,
+    postedPlatforms: res.platforms,
+    postError: res.errors.length > 0 ? res.errors.join(" | ") : null,
   });
 
-  return { success: isSuccess, platforms, errors };
+  return { success: isSuccess, platforms: res.platforms, errors: res.errors };
 }
 
 export async function main() {
@@ -152,7 +104,7 @@ export async function main() {
   const isManualRun = process.env.MANUAL_RUN === "true" || process.env.GITHUB_EVENT_NAME === "workflow_dispatch";
   console.log(`Execution Mode: ${isManualRun ? "MANUAL (Immediate Dispatch)" : "CRON (Scheduled Window)"}`);
 
-  // 1. Discover all user IDs from users collection (including virtual parents)
+  // 1. Discover all user IDs from users collection
   let userIds: string[] = [];
   try {
     const userDocs = await db.collection("users").listDocuments();
