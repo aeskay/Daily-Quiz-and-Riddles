@@ -51,6 +51,82 @@ const App: React.FC = () => {
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mobile/PWA Back Navigation & Double-Back Exit
+  const [showExitToast, setShowExitToast] = useState(false);
+  const lastBackPressRef = useRef<number>(0);
+  const selectedPostRef = useRef(selectedPost);
+  const isSettingsOpenRef = useRef(isSettingsOpen);
+  const isSidebarOpenRef = useRef(isSidebarOpen);
+  const viewModeRef = useRef(viewMode);
+  const selectedCategoryRef = useRef(selectedCategory);
+
+  selectedPostRef.current = selectedPost;
+  isSettingsOpenRef.current = isSettingsOpen;
+  isSidebarOpenRef.current = isSidebarOpen;
+  viewModeRef.current = viewMode;
+  selectedCategoryRef.current = selectedCategory;
+
+  // Auto-hide the double-back exit toast after 2 seconds
+  useEffect(() => {
+    if (showExitToast) {
+      const timer = setTimeout(() => setShowExitToast(false), 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [showExitToast]);
+
+  // Mobile/PWA Back Button navigation handling
+  useEffect(() => {
+    // Set initial baseline history state
+    window.history.replaceState({ app: 'dqr', step: 1 }, '');
+    window.history.pushState({ app: 'dqr', step: 2 }, '');
+
+    const handlePopState = () => {
+      // 1. If PostModal is open, close it
+      if (selectedPostRef.current) {
+        setSelectedPost(null);
+        window.history.pushState({ app: 'dqr', step: 2 }, '');
+        return;
+      }
+
+      // 2. If SettingsModal is open, close it
+      if (isSettingsOpenRef.current) {
+        setIsSettingsOpen(false);
+        window.history.pushState({ app: 'dqr', step: 2 }, '');
+        return;
+      }
+
+      // 3. If mobile sidebar drawer is open, close it
+      if (isSidebarOpenRef.current) {
+        setIsSidebarOpen(false);
+        window.history.pushState({ app: 'dqr', step: 2 }, '');
+        return;
+      }
+
+      // 4. If in another view (Queue, Archive, Generate) or category filter active, return to feeds
+      if (viewModeRef.current !== ViewMode.Today || selectedCategoryRef.current !== null) {
+        setViewMode(ViewMode.Today);
+        setSelectedCategory(null);
+        setQueueSubTab('queued');
+        window.history.pushState({ app: 'dqr', step: 2 }, '');
+        return;
+      }
+
+      // 5. Already on main Feed: Double-back to exit mechanism
+      const now = Date.now();
+      if (now - lastBackPressRef.current < 2000) {
+        // Second back press within 2s: allow app to exit
+        window.history.back();
+      } else {
+        lastBackPressRef.current = now;
+        setShowExitToast(true);
+        window.history.pushState({ app: 'dqr', step: 2 }, '');
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // 1. Listen to Firebase Auth state
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
@@ -925,6 +1001,16 @@ const App: React.FC = () => {
       />
 
       {isSidebarOpen && <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-40 md:hidden" onClick={() => setIsSidebarOpen(false)} />}
+
+      {/* Mobile/PWA Exit Confirmation Toast */}
+      {showExitToast && (
+        <div 
+          className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 bg-zinc-900/95 border border-zinc-700/80 text-white px-5 py-3 rounded-2xl shadow-2xl backdrop-blur-md flex items-center gap-2.5 text-xs sm:text-sm font-bold animate-in fade-in slide-in-from-bottom-4 duration-200 pointer-events-none"
+        >
+          <span className="w-2 h-2 rounded-full bg-[#0477CF] animate-ping" />
+          <span>Press back again to exit</span>
+        </div>
+      )}
     </div>
   );
 };
