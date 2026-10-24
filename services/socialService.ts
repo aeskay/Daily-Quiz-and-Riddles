@@ -408,8 +408,10 @@ export async function realignQueuedPosts(
     // If time actually changed, update Buffer and Firestore
     if (post.scheduledTime !== newDueAt) {
       if (post.bufferPostIds && post.bufferPostIds.length > 0) {
+        const caption = buildSocialCaption(post);
+        const imageUrl = post.renderedImageUrl || post.imageUrl;
         for (const bid of post.bufferPostIds) {
-          rescheduleBufferPost(bufferToken, bid, newDueAt).catch(console.warn);
+          rescheduleBufferPost(bufferToken, bid, newDueAt, caption, imageUrl).catch(console.warn);
         }
       }
       const updated: QuizPost = {
@@ -424,6 +426,39 @@ export async function realignQueuedPosts(
   }
 
   return updatedPosts;
+}
+
+/**
+ * Reschedules an already queued post to a new custom date/time or slot
+ */
+export async function reschedulePost(
+  userId: string,
+  post: QuizPost,
+  newDueAtIso: string
+): Promise<QuizPost> {
+  const social = getLocalSocialConfig();
+  const bufferToken =
+    social.buffer?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
+    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+
+  const caption = buildSocialCaption(post);
+  const imageUrl = post.renderedImageUrl || post.imageUrl;
+
+  if (post.bufferPostIds && post.bufferPostIds.length > 0) {
+    await Promise.allSettled(
+      post.bufferPostIds.map(bid =>
+        rescheduleBufferPost(bufferToken, bid, newDueAtIso, caption, imageUrl)
+      )
+    );
+  }
+
+  const updated: QuizPost = {
+    ...post,
+    scheduledTime: newDueAtIso,
+  };
+  await updateUserPost(userId, updated);
+  return updated;
 }
 
 /**

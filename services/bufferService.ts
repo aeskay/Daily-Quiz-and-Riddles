@@ -257,7 +257,9 @@ export async function deleteFromAllBufferChannels(
 export async function rescheduleBufferPost(
   accessToken: string,
   postId: string,
-  dueAt: string
+  dueAt: string,
+  text: string = 'Daily Quiz & Riddles',
+  imageUrl?: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const mutation = `
@@ -268,6 +270,9 @@ export async function rescheduleBufferPost(
               id
             }
           }
+          ... on InvalidInputError {
+            message
+          }
           ... on UnexpectedError {
             message
           }
@@ -275,6 +280,15 @@ export async function rescheduleBufferPost(
       }
     `;
     const endpoint = getBufferEndpoint();
+    const input: any = {
+      id: postId.trim(),
+      text,
+      dueAt,
+      mode: 'customScheduled'
+    };
+    if (imageUrl && imageUrl.startsWith('http')) {
+      input.assets = [{ image: { url: imageUrl } }];
+    }
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
@@ -283,12 +297,18 @@ export async function rescheduleBufferPost(
       },
       body: JSON.stringify({
         query: mutation,
-        variables: { input: { id: postId.trim(), dueAt, mode: 'customScheduled' } },
+        variables: { input },
       }),
     });
     const data = await res.json();
     if (data.errors && data.errors.length > 0) {
       return { success: false, error: data.errors[0]?.message };
+    }
+    const payload = data?.data?.editPost;
+    if (payload?.post?.id) {
+      return { success: true };
+    } else if (payload?.message) {
+      return { success: false, error: payload.message };
     }
     return { success: true };
   } catch (err: any) {

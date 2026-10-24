@@ -8,7 +8,7 @@ import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
-import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate, unqueuePost, findNextAvailableSlotDate } from '../services/socialService';
+import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate, unqueuePost, reschedulePost, findNextAvailableSlotDate } from '../services/socialService';
 import { dispatchPostDirectly, buildSocialCaption, parseWyr, stripHookFromQuestion } from '../services/socialDirectService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
@@ -232,6 +232,22 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   const [queueSuccess, setQueueSuccess] = useState(false);
   const [isPostingNow, setIsPostingNow] = useState(false);
   const [postNowStatus, setPostNowStatus] = useState<string | null>(null);
+
+  // Rescheduling states
+  const [showReschedule, setShowReschedule] = useState(false);
+  const [rescheduleInput, setRescheduleInput] = useState('');
+  const [isRescheduling, setIsRescheduling] = useState(false);
+
+  useEffect(() => {
+    if (post?.scheduledTime) {
+      const d = new Date(post.scheduledTime);
+      if (!isNaN(d.getTime())) {
+        const pad = (n: number) => String(n).padStart(2, '0');
+        const localStr = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        setRescheduleInput(localStr);
+      }
+    }
+  }, [post?.scheduledTime]);
 
   // Compute the projected next available slot label if this post is queued
   const nextSlotLabel = React.useMemo(() => {
@@ -499,6 +515,26 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
     }
   };
 
+  const handleReschedule = async () => {
+    if (!post?.userId || !rescheduleInput) return;
+    setIsRescheduling(true);
+    try {
+      const newDate = new Date(rescheduleInput);
+      if (isNaN(newDate.getTime())) {
+        alert("Please select a valid date and time.");
+        return;
+      }
+      const updated = await reschedulePost(post.userId, post, newDate.toISOString());
+      onPostUpdated?.(updated);
+      setShowReschedule(false);
+    } catch (err: any) {
+      console.error("Reschedule error:", err);
+      alert("Failed to reschedule post: " + (err?.message || err));
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
   const handlePostNow = async () => {
     if (!post?.userId) {
       alert("Please sign in to post.");
@@ -609,14 +645,51 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
           
           {/* Scheduled / Posted Status Notification */}
           {post.scheduleStatus === 'queued' && (
-            <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-between">
-              <span className="flex items-center gap-1.5 truncate">
-                <Clock size={13} className="text-amber-400 shrink-0" />
-                <span className="truncate">Scheduled: {getQueuedScheduleInfo(post).label}</span>
-              </span>
-              <span className="text-[10px] font-mono text-amber-400 uppercase bg-amber-500/20 px-1.5 py-0.5 rounded shrink-0 ml-2">
-                QUEUED
-              </span>
+            <div className="w-full flex flex-col gap-2">
+              <div className="w-full px-3 py-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-bold flex items-center justify-between">
+                <span className="flex items-center gap-1.5 truncate">
+                  <Clock size={13} className="text-amber-400 shrink-0" />
+                  <span className="truncate">Scheduled: {getQueuedScheduleInfo(post).label}</span>
+                </span>
+                <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowReschedule(prev => !prev)}
+                    className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors"
+                  >
+                    {showReschedule ? 'Cancel' : 'Change Time'}
+                  </button>
+                  <span className="text-[10px] font-mono text-amber-400 uppercase bg-amber-500/20 px-1.5 py-0.5 rounded">
+                    QUEUED
+                  </span>
+                </div>
+              </div>
+
+              {showReschedule && (
+                <div className="p-3 bg-zinc-900 border border-zinc-800 rounded-xl space-y-2 animate-in fade-in">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-zinc-200">Change Scheduled Time</span>
+                    <span className="text-[10px] text-zinc-400">Updates Buffer calendar</span>
+                  </div>
+                  <div className="flex gap-2 flex-wrap sm:flex-nowrap">
+                    <input
+                      type="datetime-local"
+                      value={rescheduleInput}
+                      onChange={e => setRescheduleInput(e.target.value)}
+                      className="flex-1 bg-zinc-950 border border-zinc-700 rounded-lg px-2.5 py-1.5 text-xs text-white outline-none focus:border-[#0477CF]"
+                    />
+                    <button
+                      type="button"
+                      onClick={handleReschedule}
+                      disabled={isRescheduling || !rescheduleInput}
+                      className="px-3 py-1.5 bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-lg transition-all shrink-0 flex items-center gap-1"
+                    >
+                      {isRescheduling ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
+                      Save New Time
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
           {post.scheduleStatus === 'posted' && (
