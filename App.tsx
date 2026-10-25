@@ -816,7 +816,7 @@ const App: React.FC = () => {
                                     </span>
                                   )}
                                 </div>
-                                <div className="flex items-center gap-1.5">
+                                <div className="flex items-center gap-1.5 pr-16 md:pr-0">
                                   {post.scheduleStatus === 'queued' && (
                                     <span className="text-[9px] font-bold text-amber-700 bg-amber-100 border border-amber-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                                       <Clock size={10} /> QUEUED
@@ -922,11 +922,24 @@ const App: React.FC = () => {
                           </div>
                         </ThemeWrapper>
 
-                        <div className="absolute top-4 right-4 flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={(e) => { e.stopPropagation(); toggleArchive(post); }} className={`p-2 rounded-xl shadow-lg text-white transition-all ${post.status === 'archived' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-zinc-800 hover:bg-zinc-700'}`} title={post.status === 'archived' ? 'Unarchive' : 'Archive'}>
-                            {post.status === 'archived' ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+                        {/* Action buttons (archive / delete) - Visible by default on mobile touchscreens */}
+                        <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-20">
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); toggleArchive(post); }} 
+                            className={`p-2 rounded-xl shadow-md text-white transition-all active:scale-95 ${post.status === 'archived' ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-zinc-800/90 hover:bg-zinc-700 border border-zinc-700/60'}`} 
+                            title={post.status === 'archived' ? 'Unarchive' : 'Archive'}
+                          >
+                            {post.status === 'archived' ? <ArchiveRestore size={14} /> : <Archive size={14} />}
                           </button>
-                          <button onClick={(e) => { e.stopPropagation(); deletePost(post.id); }} className="p-2 bg-red-500/80 hover:bg-red-600 text-white rounded-xl shadow-lg transition-all" title="Delete"><Trash2 size={15} /></button>
+                          <button 
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); deletePost(post.id); }} 
+                            className="p-2 bg-red-500/85 hover:bg-red-600 text-white rounded-xl shadow-md transition-all active:scale-95 border border-red-400/40" 
+                            title="Delete"
+                          >
+                            <Trash2 size={14} />
+                          </button>
                         </div>
                       </div>
                     );

@@ -637,11 +637,34 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
       <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
 
       <div
-        className="w-full max-w-5xl bg-[#09090b] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col md:flex-row max-h-[94vh]"
+        className="w-full max-w-5xl bg-[#09090b] border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col max-h-[94vh]"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* ── Left Preview Panel ─────────────────────────────────────────────────── */}
-        <div className="w-full md:w-[470px] bg-zinc-950 p-4 sm:p-6 md:p-8 border-b md:border-b-0 md:border-r border-zinc-800 flex flex-col items-center justify-between gap-4 sm:gap-5 overflow-y-auto">
+        {/* ── Unified Top Header (Always at the very top on all devices) ── */}
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3.5 sm:py-4 border-b border-zinc-800 bg-[#0c0c0e] shrink-0 z-30">
+          <div className="flex items-center gap-2.5 sm:gap-3 overflow-hidden">
+            <span className="text-[10px] font-black uppercase tracking-widest text-[#0477CF] px-2.5 py-1 bg-[#0477CF]/10 rounded-lg shrink-0">
+              {post.category}
+            </span>
+            <h3 className="text-sm sm:text-base md:text-lg font-bold text-white font-heading truncate">
+              Post Details & Studio
+            </h3>
+          </div>
+          <button 
+            type="button"
+            onClick={handleClose} 
+            className="p-1.5 sm:p-2 text-zinc-400 hover:text-white hover:bg-zinc-800 rounded-xl transition-colors shrink-0"
+            title="Close"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* ── Single Unified Scroll Container (Entire modal scrolls as one seamless page on mobile) ── */}
+        <div className="flex-1 overflow-y-auto overscroll-contain">
+          <div className="flex flex-col md:flex-row min-h-full">
+            {/* ── Left / Top Panel: Preview Card & Publishing Actions ── */}
+            <div className="w-full md:w-[470px] bg-zinc-950/80 p-4 sm:p-6 border-b md:border-b-0 md:border-r border-zinc-800/80 flex flex-col items-center gap-4 shrink-0">
           
           {/* Scheduled / Posted Status Notification */}
           {post.scheduleStatus === 'queued' && (
@@ -851,20 +874,14 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
           </div>
         </div>
 
-        {/* ── Right Controls & Details Panel ────────────────────────────────────── */}
-        <div className="flex-1 p-4 sm:p-6 md:p-8 flex flex-col justify-between overflow-y-auto space-y-4 sm:space-y-6">
-          <div className="space-y-4 sm:space-y-6">
-            {/* Header */}
-            <div className="flex justify-between items-start">
-              <div>
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#0477CF] px-2.5 py-1 bg-[#0477CF]/10 rounded-lg">
-                  {post.category}
-                </span>
-                <h3 className="text-lg sm:text-xl font-bold text-white font-heading mt-1 sm:mt-2">Post Editor & Vector Tools</h3>
-              </div>
-              <button onClick={handleClose} className="p-2 text-zinc-500 hover:text-white rounded-xl">
-                <X size={20} />
-              </button>
+        {/* ── Right / Bottom Panel: Controls & Details ──────────────────────────── */}
+        <div className="flex-1 p-4 sm:p-6 flex flex-col justify-between space-y-4 sm:space-y-5">
+          <div className="space-y-4 sm:space-y-5">
+            {/* Section Header */}
+            <div className="flex items-center justify-between pb-1 border-b border-zinc-850">
+              <span className="text-xs font-bold text-zinc-400 uppercase tracking-wider flex items-center gap-1.5">
+                <Sparkles size={13} className="text-[#0477CF]" /> Editor & Content Tools
+              </span>
             </div>
 
             {/* Vector Selector & Tools */}
@@ -989,15 +1006,20 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
             </div>
           </div>
 
-          <button
-            onClick={handleClose}
-            className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3.5 rounded-2xl transition-colors"
-          >
-            Done
-          </button>
+          <div className="pt-2">
+            <button
+              type="button"
+              onClick={handleClose}
+              className="w-full bg-zinc-800 hover:bg-zinc-700 text-white font-bold py-3.5 rounded-2xl transition-colors text-sm"
+            >
+              Done
+            </button>
+          </div>
         </div>
       </div>
     </div>
+  </div>
+</div>
   );
 };
 
