@@ -82,7 +82,8 @@ export async function postToBuffer(
   text: string,
   imageUrl?: string,
   mode: 'shareNow' | 'customScheduled' | 'addToQueue' = 'shareNow',
-  dueAt?: string
+  dueAt?: string,
+  service?: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const mutation = `
@@ -128,6 +129,16 @@ export async function postToBuffer(
           },
         },
       ];
+    }
+
+    // Instagram posts REQUIRE metadata type ('post', 'reel', or 'story') and shouldShareToFeed
+    if (service === 'instagram' || channelId.trim() === '6adb582a778b240e2f9ce322') {
+      input.metadata = {
+        instagram: {
+          type: 'post',
+          shouldShareToFeed: true,
+        },
+      };
     }
 
     const res = await fetch(endpoint, {
@@ -176,7 +187,7 @@ export async function postToAllBufferChannels(
   const ids: string[] = [];
 
   for (const ch of channels) {
-    const res = await postToBuffer(accessToken, ch.id, text, imageUrl, mode, dueAt);
+    const res = await postToBuffer(accessToken, ch.id, text, imageUrl, mode, dueAt, ch.service);
     if (res.success) {
       const label = ch.service === 'instagram' ? 'Instagram (+ FB Page cross-post)' : `${ch.name} (${ch.service})`;
       platforms.push(label);
@@ -205,12 +216,10 @@ export async function deletePostFromBuffer(
     const mutation = `
       mutation DeletePost($input: DeletePostInput!) {
         deletePost(input: $input) {
-          ... on PostActionSuccess {
-            post {
-              id
-            }
+          ... on DeletePostSuccess {
+            id
           }
-          ... on UnexpectedError {
+          ... on VoidMutationError {
             message
           }
         }
@@ -259,7 +268,8 @@ export async function rescheduleBufferPost(
   postId: string,
   dueAt: string,
   text: string = 'Daily Quiz & Riddles',
-  imageUrl?: string
+  imageUrl?: string,
+  isInstagram?: boolean
 ): Promise<{ success: boolean; error?: string }> {
   try {
     const mutation = `
@@ -288,6 +298,14 @@ export async function rescheduleBufferPost(
     };
     if (imageUrl && imageUrl.startsWith('http')) {
       input.assets = [{ image: { url: imageUrl } }];
+    }
+    if (isInstagram) {
+      input.metadata = {
+        instagram: {
+          type: 'post',
+          shouldShareToFeed: true,
+        },
+      };
     }
     const res = await fetch(endpoint, {
       method: 'POST',
