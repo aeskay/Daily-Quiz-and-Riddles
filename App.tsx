@@ -38,6 +38,9 @@ import {
   WordPressConfig,
   getWordPressCategoryId
 } from './services/wordpressService';
+import * as htmlToImage from 'html-to-image';
+import { uploadRenderedCard } from './services/storageService';
+import { Canvas1000, getCardTextAndLayout } from './components/PostModal';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -60,6 +63,62 @@ const App: React.FC = () => {
   const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
   const [isPublishingWp, setIsPublishingWp] = useState(false);
   const [articleEditorTab, setArticleEditorTab] = useState<'preview' | 'html'>('preview');
+
+  const articleCardContainerRef = useRef<HTMLDivElement>(null);
+  const articleCardExportRef = useRef<HTMLDivElement>(null);
+  const [articleCardWidth, setArticleCardWidth] = useState(280);
+  const [isRenderingCard, setIsRenderingCard] = useState(false);
+
+  useEffect(() => {
+    const updateArticleCardWidth = () => {
+      if (articleCardContainerRef.current) {
+        const w = articleCardContainerRef.current.clientWidth;
+        if (w > 0) setArticleCardWidth(w);
+      }
+    };
+    updateArticleCardWidth();
+    window.addEventListener('resize', updateArticleCardWidth);
+    return () => window.removeEventListener('resize', updateArticleCardWidth);
+  }, [selectedArticlePost, viewMode]);
+
+  const handleRenderArticleCard = async () => {
+    if (!selectedArticlePost || !articleCardExportRef.current) return;
+    setIsRenderingCard(true);
+    try {
+      const el = articleCardExportRef.current;
+      const origTransform = el.style.transform;
+      el.style.transform = 'none';
+      const dataUrl = await htmlToImage.toJpeg(el, {
+        quality: 0.85,
+        pixelRatio: 1.0,
+        backgroundColor: '#ffffff',
+        skipFonts: true,
+      });
+      el.style.transform = origTransform;
+
+      let storageUrl = dataUrl;
+      if (currentUser) {
+        storageUrl = await uploadRenderedCard(currentUser.uid, selectedArticlePost.id, dataUrl);
+      }
+
+      const updated: QuizPost = {
+        ...selectedArticlePost,
+        renderedImageUrl: storageUrl,
+      };
+
+      setSelectedArticlePost(updated);
+      setAllPosts(prev => prev.map(p => p.id === selectedArticlePost.id ? updated : p));
+      if (currentUser) {
+        await updateUserPost(currentUser.uid, updated);
+      }
+      setSuccessMsg("Visual card rendered and set as Featured Image!");
+    } catch (err: any) {
+      console.error("Card render error:", err);
+      setError("Failed to render card: " + (err?.message || err));
+    } finally {
+      setIsRenderingCard(false);
+    }
+  };
 
   const handleOpenArticleEditor = (post: QuizPost) => {
     setSelectedArticlePost(post);
@@ -108,14 +167,38 @@ const App: React.FC = () => {
 
     setIsPublishingWp(true);
     try {
+      let postToPublish = { ...post };
+      // Ensure visual card is rendered as the featured image rather than raw clipart
+      if (!postToPublish.renderedImageUrl && articleCardExportRef.current) {
+        try {
+          const el = articleCardExportRef.current;
+          const origTransform = el.style.transform;
+          el.style.transform = 'none';
+          const dataUrl = await htmlToImage.toJpeg(el, {
+            quality: 0.85,
+            pixelRatio: 1.0,
+            backgroundColor: '#ffffff',
+            skipFonts: true,
+          });
+          el.style.transform = origTransform;
+          if (currentUser) {
+            postToPublish.renderedImageUrl = await uploadRenderedCard(currentUser.uid, post.id, dataUrl);
+          } else {
+            postToPublish.renderedImageUrl = dataUrl;
+          }
+        } catch (captureErr) {
+          console.warn("Could not capture card during WP publish:", captureErr);
+        }
+      }
+
       const res = await publishToWordPress(cfg, {
-        post,
+        post: postToPublish,
         htmlContent: articleHtmlDraft,
         status,
       });
 
       const updated: QuizPost = {
-        ...post,
+        ...postToPublish,
         articleContent: articleHtmlDraft,
         wpPostId: res.id,
         wpPostUrl: res.link,
@@ -920,13 +1003,54 @@ const App: React.FC = () => {
                         <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
                           <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400">Featured Media Card</h4>
                           
-                          <div className="w-full aspect-square rounded-2xl overflow-hidden bg-black/40 border border-zinc-800/80 shadow-md">
-                            <img
-                              src={selectedArticlePost.renderedImageUrl || selectedArticlePost.imageUrl}
-                              alt="Featured Post Card"
-                              className="w-full h-full object-cover"
-                            />
+                          <div 
+                            ref={articleCardContainerRef}
+                            className="w-full aspect-square rounded-2xl overflow-hidden bg-white border border-zinc-800/80 shadow-md relative flex items-center justify-center"
+                          >
+                            {selectedArticlePost.renderedImageUrl ? (
+                              <img
+                                src={selectedArticlePost.renderedImageUrl}
+                                alt="Featured Post Card"
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div
+                                ref={articleCardExportRef}
+                                style={{
+                                  width: '1000px',
+                                  height: '1000px',
+                                  transform: `scale(${articleCardWidth / 1000})`,
+                                  transformOrigin: 'top left',
+                                }}
+                                className="shrink-0"
+                              >
+                                {(() => {
+                                  const layoutInfo = getCardTextAndLayout(selectedArticlePost);
+                                  return (
+                                    <Canvas1000
+                                      contextText={layoutInfo.contextText}
+                                      questionText={layoutInfo.questionText}
+                                      imageUrl={selectedArticlePost.imageUrl || null}
+                                      resolvedLayout={layoutInfo.resolvedLayout}
+                                    />
+                                  );
+                                })()}
+                              </div>
+                            )}
                           </div>
+
+                          {!selectedArticlePost.renderedImageUrl && (
+                            <button
+                              type="button"
+                              onClick={handleRenderArticleCard}
+                              disabled={isRenderingCard}
+                              className="w-full py-2 px-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-sm active:scale-95 border border-zinc-700/60"
+                              title="Render and lock this card as the image"
+                            >
+                              {isRenderingCard ? <Loader2 size={13} className="animate-spin text-[#0477CF]" /> : <ImageIcon size={13} className="text-[#0477CF]" />}
+                              <span>{isRenderingCard ? 'Rendering Card...' : 'Capture Visual Card as Image'}</span>
+                            </button>
+                          )}
 
                           <div className="space-y-2 pt-2 border-t border-zinc-800/60 text-xs">
                             <div className="flex items-center justify-between">

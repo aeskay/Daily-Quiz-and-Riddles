@@ -64,14 +64,44 @@ const CanvasBranding: React.FC = () => (
   </div>
 );
 
-interface Canvas1000Props {
+export interface Canvas1000Props {
   contextText: string;
   questionText: string;
   imageUrl: string | null;
   resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr';
 }
 
-const Canvas1000: React.FC<Canvas1000Props> = ({
+export function getCardTextAndLayout(post: QuizPost): {
+  contextText: string;
+  questionText: string;
+  resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr';
+} {
+  let contextText = '';
+  let questionText = '';
+
+  if (post.category === 'Would you rather') {
+    const { optionA, optionB } = parseWyr(post.visual_text || '');
+    contextText = optionA;
+    questionText = optionB;
+    return { contextText, questionText, resolvedLayout: 'wyr' };
+  }
+
+  const { cleanQuestion } = stripHookFromQuestion(post.visual_text || '');
+  const textToUse = cleanQuestion || post.visual_text || '';
+  const parts = textToUse.split('|').map(s => s.trim());
+  if (parts.length > 1) {
+    contextText = parts[0];
+    questionText = parts.slice(1).join(' | ');
+  } else {
+    contextText = '';
+    questionText = parts[0] || '';
+  }
+
+  const resolvedLayout = (!post.imageUrl) ? 'text-only' : (contextText && questionText) ? 'side' : 'center';
+  return { contextText, questionText, resolvedLayout };
+}
+
+export const Canvas1000: React.FC<Canvas1000Props> = ({
   contextText,
   questionText,
   imageUrl,
@@ -238,6 +268,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   const [showReschedule, setShowReschedule] = useState(false);
   const [rescheduleInput, setRescheduleInput] = useState('');
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [isOpeningArticle, setIsOpeningArticle] = useState(false);
 
   useEffect(() => {
     if (post?.scheduledTime) {
@@ -866,14 +897,41 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                   </button>
                   {onWriteArticle && (
                     <button
-                      onClick={() => onWriteArticle(post)}
+                      onClick={async () => {
+                        if (!onWriteArticle || !post) return;
+                        setIsOpeningArticle(true);
+                        try {
+                          let updated = getUpdatedPost();
+                          if (!updated.renderedImageUrl && exportRef.current) {
+                            try {
+                              const dataUrl = await generateCardDataUrl();
+                              if (post.userId) {
+                                const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
+                                updated.renderedImageUrl = storageUrl;
+                                await updateUserPost(post.userId, updated);
+                              } else {
+                                updated.renderedImageUrl = dataUrl;
+                              }
+                              onPostUpdated?.(updated);
+                            } catch (renderErr) {
+                              console.warn("Could not capture rendered card before opening article:", renderErr);
+                            }
+                          }
+                          onWriteArticle(updated);
+                        } finally {
+                          setIsOpeningArticle(false);
+                        }
+                      }}
+                      disabled={isOpeningArticle}
                       type="button"
-                      className="py-2.5 sm:py-3 px-3.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 shrink-0"
+                      className="py-2.5 sm:py-3 px-3.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 shrink-0 disabled:opacity-50"
                       title="Write full SEO article for WordPress website"
                     >
-                      <BookOpen size={14} className="text-[#0477CF]" />
+                      {isOpeningArticle ? <Loader2 size={14} className="animate-spin text-[#0477CF]" /> : <BookOpen size={14} className="text-[#0477CF]" />}
                       <span>
-                        {post.wpStatus === 'publish'
+                        {isOpeningArticle
+                          ? 'Rendering Card...'
+                          : post.wpStatus === 'publish'
                           ? 'WP Article (Live)'
                           : post.wpStatus === 'future'
                           ? 'WP Article (Scheduled)'
