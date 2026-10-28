@@ -183,16 +183,27 @@ export async function dispatchPostDirectly(
   }
 
   const caption = buildSocialCaption(post);
-  const bufferToken =
+  const bufferTokens: string[] = [];
+  const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
     'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+  if (primaryToken) bufferTokens.push(primaryToken);
+
+  const secondaryToken =
+    social.bufferSecondary?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_SECONDARY_TOKEN);
+  if (secondaryToken && social.bufferSecondary?.enabled !== false) {
+    bufferTokens.push(secondaryToken);
+  }
 
   const res = await postToAllBufferChannels(
-    bufferToken,
+    bufferTokens,
     caption,
     imageUrl.startsWith('http') ? imageUrl : undefined,
-    'shareNow'
+    'shareNow',
+    undefined,
+    post.wpPostUrl
   );
 
   const isSuccess = res.platforms.length > 0;
@@ -231,25 +242,72 @@ export interface SocialTestResult {
 }
 
 /**
- * Verifies connection to all 3 Buffer channels without publishing spam
+ * Verifies connection to all Buffer channels across Account 1 (IG, TikTok, X) and Account 2 (FB, Pinterest)
  */
 export async function testAllSocialIntegrations(social: SocialConfig): Promise<SocialTestResult[]> {
-  const bufferToken =
+  const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
     'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
 
-  const channels = await getBufferChannels(bufferToken);
+  const secondaryToken =
+    social.bufferSecondary?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_SECONDARY_TOKEN);
+
   const results: SocialTestResult[] = [];
 
-  for (const ch of channels) {
-    const label = ch.service === 'instagram' ? `${ch.name} (Instagram + FB cross-post)` : `${ch.name} (${ch.service})`;
+  // 1. Test Primary Account (Instagram, TikTok, Twitter/X)
+  try {
+    const channels1 = await getBufferChannels(primaryToken);
+    for (const ch of channels1) {
+      const label = ch.service === 'instagram' ? 'Instagram'
+                  : ch.service === 'tiktok' ? 'TikTok'
+                  : ch.service === 'twitter' ? 'Twitter / X'
+                  : `${ch.name} (${ch.service})`;
+      results.push({
+        platform: 'buffer',
+        name: `[Acct 1] ${label}`,
+        success: true,
+        id: ch.id,
+      });
+    }
+  } catch (err: any) {
     results.push({
       platform: 'buffer',
-      name: label,
-      success: true,
-      id: ch.id,
+      name: '[Acct 1] Buffer Primary Account',
+      success: false,
+      error: err?.message || String(err),
     });
+  }
+
+  // 2. Test Secondary Account (Pinterest, Facebook Page)
+  if (secondaryToken && secondaryToken.trim()) {
+    try {
+      const channels2 = await getBufferChannels(secondaryToken);
+      for (const ch of channels2) {
+        let label = ch.service === 'facebook' ? 'Facebook Page'
+                  : ch.service === 'pinterest' ? 'Pinterest'
+                  : `${ch.name} (${ch.service})`;
+        
+        if (ch.service === 'pinterest' && (!ch.boards || ch.boards.length === 0)) {
+          label += ' ⚠️ (Needs 1 Board created in Pinterest)';
+        }
+
+        results.push({
+          platform: 'buffer',
+          name: `[Acct 2] ${label}`,
+          success: true,
+          id: ch.id,
+        });
+      }
+    } catch (err: any) {
+      results.push({
+        platform: 'buffer',
+        name: '[Acct 2] Buffer Secondary Account',
+        success: false,
+        error: err?.message || String(err),
+      });
+    }
   }
 
   return results;

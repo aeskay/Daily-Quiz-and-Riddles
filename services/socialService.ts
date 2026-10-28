@@ -51,6 +51,10 @@ export const DEFAULT_SOCIAL_CONFIG: SocialConfig = {
     channelId: (typeof process !== 'undefined' && process.env?.VITE_BUFFER_CHANNEL_ID) || '6ada7779778b240e2f9221b8',
     enabled: true,
   },
+  bufferSecondary: {
+    accessToken: (typeof process !== 'undefined' && process.env?.VITE_BUFFER_SECONDARY_TOKEN) || '',
+    enabled: true,
+  },
   scheduleTimes: ["10:00", "19:00"],
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "America/Chicago",
   autopostEnabled: true,
@@ -363,18 +367,29 @@ export async function queuePostForAutopost(
   // Build social caption (will include the WordPress article link if generated above!)
   const caption = buildSocialCaption(updated);
 
-  const bufferToken =
+  // Collect all active Buffer access tokens (Primary + Secondary)
+  const bufferTokens: string[] = [];
+  const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
     'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+  if (primaryToken) bufferTokens.push(primaryToken);
 
-  // Push directly to Buffer with exact dueAt timestamp!
+  const secondaryToken =
+    social.bufferSecondary?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_SECONDARY_TOKEN);
+  if (secondaryToken && social.bufferSecondary?.enabled !== false) {
+    bufferTokens.push(secondaryToken);
+  }
+
+  // Push directly to Buffer with exact dueAt timestamp across all accounts!
   const res = await postToAllBufferChannels(
-    bufferToken,
+    bufferTokens,
     caption,
     imageUrl && imageUrl.startsWith('http') ? imageUrl : undefined,
     'customScheduled',
-    dueAtIso
+    dueAtIso,
+    updated.wpPostUrl
   );
 
   updated = {
@@ -398,9 +413,17 @@ export async function unqueuePost(userId: string, post: QuizPost): Promise<QuizP
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
     'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
 
-  // Clean up from Buffer if buffer IDs exist
+  // Clean up from Buffer across all active accounts if buffer IDs exist
   if (post.bufferPostIds && post.bufferPostIds.length > 0) {
-    deleteFromAllBufferChannels(bufferToken, post.bufferPostIds).catch(err => {
+    const bufferTokens: string[] = [];
+    const primary =
+      social.buffer?.accessToken ||
+      (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
+      'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+    if (primary) bufferTokens.push(primary);
+    if (social.bufferSecondary?.accessToken) bufferTokens.push(social.bufferSecondary.accessToken);
+
+    deleteFromAllBufferChannels(bufferTokens, post.bufferPostIds).catch(err => {
       console.warn("Error deleting posts from Buffer on unqueue:", err);
     });
   }

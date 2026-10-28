@@ -422,10 +422,13 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                 </div>
 
                 <div>
-                  <label className="text-[10px] text-zinc-400 block mb-1">Buffer Access Token</label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Account 1 Token (IG, TikTok, X)</label>
+                    <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Primary (3 channels)</span>
+                  </div>
                   <input
                     type="password"
-                    placeholder="Buffer Access Token"
+                    placeholder="Primary Buffer Token"
                     value={socialConfig.buffer?.accessToken || (process.env.VITE_BUFFER_ACCESS_TOKEN || '')}
                     onChange={(e) => setSocialConfig({
                       ...socialConfig,
@@ -437,6 +440,58 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                     })}
                     className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
                   />
+                </div>
+
+                {/* Secondary Buffer Account (Pinterest & Facebook) */}
+                <div className="pt-3 border-t border-zinc-850 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                        <Share2 size={13} className="text-[#0477CF]" /> Secondary Buffer Account (Pinterest & Facebook)
+                      </span>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">
+                        Broadcasts to Facebook Page & Pinterest simultaneously via your second free Buffer account.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Account 2 Channel Preview Badges */}
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
+                      <span className="text-base">📌</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-white truncate">quiz_riddles</div>
+                        <div className="text-[10px] text-zinc-400">Pinterest (Pins)</div>
+                      </div>
+                    </div>
+                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
+                      <span className="text-base">👤</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-bold text-white truncate">Daily Quiz & Riddles</div>
+                        <div className="text-[10px] text-zinc-400">Facebook Page</div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] text-zinc-400 block mb-1">Account 2 Buffer Token (Pinterest & FB)</label>
+                    <input
+                      type="password"
+                      placeholder="Paste 2nd Buffer Access Token here"
+                      value={socialConfig.bufferSecondary?.accessToken || ''}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        bufferSecondary: {
+                          accessToken: e.target.value.trim(),
+                          enabled: true,
+                        }
+                      })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
+                    />
+                    <p className="text-[10px] text-amber-400/90 mt-1">
+                      💡 <strong>Pinterest Note:</strong> Make sure you have at least 1 Board created in your Pinterest account (e.g. named <em>Daily Quiz and Riddles</em>) so Buffer has a destination board for pins.
+                    </p>
+                  </div>
                 </div>
               </div>
 

@@ -108,6 +108,10 @@ export interface SocialConfig {
     channelId: string;
     enabled: boolean;
   };
+  bufferSecondary?: {
+    accessToken: string;
+    enabled: boolean;
+  };
   wordpress?: WordPressConfig;
   scheduleTimes: string[]; // e.g. ["09:00", "13:00", "18:00"]
   timezone: string; // e.g. "America/Chicago"

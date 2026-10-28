@@ -9,6 +9,7 @@ export interface BufferChannel {
   id: string;
   name: string;
   service: string;
+  boards?: { id: string; name: string }[];
 }
 
 const getBufferEndpoint = () => {
@@ -45,7 +46,21 @@ export async function getBufferChannels(accessToken: string): Promise<BufferChan
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        query: `query GetChannels($input: ChannelsInput!) { channels(input: $input) { id name service } }`,
+        query: `query GetChannels($input: ChannelsInput!) { 
+          channels(input: $input) { 
+            id 
+            name 
+            service 
+            metadata {
+              ... on PinterestMetadata {
+                boards {
+                  id
+                  name
+                }
+              }
+            }
+          } 
+        }`,
         variables: { input: { organizationId: orgId } },
       }),
     });
@@ -53,7 +68,12 @@ export async function getBufferChannels(accessToken: string): Promise<BufferChan
     const channelsData = await channelsRes.json();
     const list = channelsData?.data?.channels;
     if (Array.isArray(list) && list.length > 0) {
-      return list;
+      return list.map((ch: any) => ({
+        id: ch.id,
+        name: ch.name,
+        service: ch.service,
+        boards: ch.metadata?.boards || [],
+      }));
     }
     return getFallbackChannels();
   } catch (err) {
@@ -83,7 +103,9 @@ export async function postToBuffer(
   imageUrl?: string,
   mode: 'shareNow' | 'customScheduled' | 'addToQueue' = 'shareNow',
   dueAt?: string,
-  service?: string
+  service?: string,
+  boardId?: string,
+  targetUrl?: string
 ): Promise<{ success: boolean; id?: string; error?: string }> {
   try {
     const mutation = `
@@ -131,7 +153,7 @@ export async function postToBuffer(
       ];
     }
 
-    // Instagram posts REQUIRE metadata type ('post', 'reel', or 'story') and shouldShareToFeed
+    // Platform-specific metadata required by Buffer
     if (service === 'instagram' || channelId.trim() === '6adb582a778b240e2f9ce322') {
       input.metadata = {
         instagram: {
@@ -139,6 +161,27 @@ export async function postToBuffer(
           shouldShareToFeed: true,
         },
       };
+    } else if (service === 'facebook') {
+      input.metadata = {
+        facebook: {
+          type: 'post',
+        },
+      };
+    } else if (service === 'pinterest') {
+      if (boardId) {
+        input.metadata = {
+          pinterest: {
+            boardServiceId: boardId,
+            title: text.split('\n')[0].slice(0, 80) || 'Daily Quiz & Riddles',
+            url: targetUrl || 'https://quizandriddles.com',
+          },
+        };
+      } else {
+        return {
+          success: false,
+          error: 'Pinterest post requires at least one Board on your Pinterest account. Please create a board on Pinterest first.',
+        };
+      }
     }
 
     const res = await fetch(endpoint, {
@@ -172,28 +215,43 @@ export async function postToBuffer(
 }
 
 /**
- * Dispatches to all connected Buffer channels (Instagram, TikTok, Twitter/X)
+ * Dispatches to all connected Buffer channels across one or multiple Buffer tokens (e.g. Account 1 + Account 2)
  */
 export async function postToAllBufferChannels(
-  accessToken: string,
+  tokenOrTokens: string | string[],
   text: string,
   imageUrl?: string,
   mode: 'shareNow' | 'customScheduled' | 'addToQueue' = 'shareNow',
-  dueAt?: string
+  dueAt?: string,
+  targetUrl?: string
 ): Promise<{ success: boolean; platforms: string[]; errors: string[]; ids: string[] }> {
-  const channels = await getBufferChannels(accessToken);
+  const tokens = Array.isArray(tokenOrTokens) ? tokenOrTokens : [tokenOrTokens];
   const platforms: string[] = [];
   const errors: string[] = [];
   const ids: string[] = [];
 
-  for (const ch of channels) {
-    const res = await postToBuffer(accessToken, ch.id, text, imageUrl, mode, dueAt, ch.service);
-    if (res.success) {
-      const label = ch.service === 'instagram' ? 'Instagram (+ FB Page cross-post)' : `${ch.name} (${ch.service})`;
-      platforms.push(label);
-      if (res.id) ids.push(res.id);
-    } else {
-      errors.push(`${ch.name} (${ch.service}): ${res.error}`);
+  for (const token of tokens) {
+    if (!token || !token.trim()) continue;
+    try {
+      const channels = await getBufferChannels(token);
+      for (const ch of channels) {
+        const boardId = ch.boards?.[0]?.id;
+        const res = await postToBuffer(token, ch.id, text, imageUrl, mode, dueAt, ch.service, boardId, targetUrl);
+        if (res.success) {
+          const label = ch.service === 'instagram' ? 'Instagram'
+                      : ch.service === 'facebook' ? 'Facebook Page'
+                      : ch.service === 'pinterest' ? 'Pinterest'
+                      : ch.service === 'tiktok' ? 'TikTok'
+                      : ch.service === 'twitter' ? 'Twitter / X'
+                      : `${ch.name} (${ch.service})`;
+          platforms.push(label);
+          if (res.id) ids.push(res.id);
+        } else {
+          errors.push(`${ch.name} (${ch.service}): ${res.error}`);
+        }
+      }
+    } catch (err: any) {
+      errors.push(`Buffer error: ${err?.message || err}`);
     }
   }
 
@@ -251,13 +309,17 @@ export async function deletePostFromBuffer(
  * Cancels/deletes scheduled posts across channels in Buffer
  */
 export async function deleteFromAllBufferChannels(
-  accessToken: string,
+  tokenOrTokens: string | string[],
   postIds?: string[]
 ): Promise<void> {
   if (!postIds || postIds.length === 0) return;
-  await Promise.allSettled(
-    postIds.map(id => deletePostFromBuffer(accessToken, id))
-  );
+  const tokens = Array.isArray(tokenOrTokens) ? tokenOrTokens : [tokenOrTokens];
+  for (const token of tokens) {
+    if (!token || !token.trim()) continue;
+    await Promise.allSettled(
+      postIds.map(id => deletePostFromBuffer(token, id))
+    );
+  }
 }
 
 /**
