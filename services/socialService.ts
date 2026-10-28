@@ -372,7 +372,7 @@ export async function queuePostForAutopost(
   const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+    '';
   if (primaryToken) bufferTokens.push(primaryToken);
 
   const secondaryToken =
@@ -411,7 +411,7 @@ export async function unqueuePost(userId: string, post: QuizPost): Promise<QuizP
   const bufferToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+    '';
 
   // Clean up from Buffer across all active accounts if buffer IDs exist
   if (post.bufferPostIds && post.bufferPostIds.length > 0) {
@@ -419,7 +419,7 @@ export async function unqueuePost(userId: string, post: QuizPost): Promise<QuizP
     const primary =
       social.buffer?.accessToken ||
       (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-      'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+      '';
     if (primary) bufferTokens.push(primary);
     if (social.bufferSecondary?.accessToken) bufferTokens.push(social.bufferSecondary.accessToken);
 

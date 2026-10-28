@@ -9,7 +9,7 @@ export interface BufferChannel {
   id: string;
   name: string;
   service: string;
-  boards?: { id: string; name: string }[];
+  boards?: { id: string; name: string; serviceId?: string }[];
 }
 
 const getBufferEndpoint = () => {
@@ -56,6 +56,7 @@ export async function getBufferChannels(accessToken: string): Promise<BufferChan
                 boards {
                   id
                   name
+                  serviceId
                 }
               }
             }
@@ -235,7 +236,7 @@ export async function postToAllBufferChannels(
     try {
       const channels = await getBufferChannels(token);
       for (const ch of channels) {
-        const boardId = ch.boards?.[0]?.id;
+        const boardId = ch.boards?.[0]?.serviceId || ch.boards?.[0]?.id;
         const res = await postToBuffer(token, ch.id, text, imageUrl, mode, dueAt, ch.service, boardId, targetUrl);
         if (res.success) {
           const label = ch.service === 'instagram' ? 'Instagram'

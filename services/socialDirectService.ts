@@ -285,20 +285,25 @@ export async function testAllSocialIntegrations(social: SocialConfig): Promise<S
     try {
       const channels2 = await getBufferChannels(secondaryToken);
       for (const ch of channels2) {
-        let label = ch.service === 'facebook' ? 'Facebook Page'
-                  : ch.service === 'pinterest' ? 'Pinterest'
-                  : `${ch.name} (${ch.service})`;
-        
-        if (ch.service === 'pinterest' && (!ch.boards || ch.boards.length === 0)) {
-          label += ' ⚠️ (Needs 1 Board created in Pinterest)';
+        if (ch.service === 'pinterest') {
+          const hasBoard = Array.isArray(ch.boards) && ch.boards.length > 0;
+          results.push({
+            platform: 'buffer',
+            name: `[Acct 2] Pinterest${hasBoard ? ` (${ch.boards[0].name})` : ''}`,
+            success: hasBoard,
+            id: ch.id,
+            error: hasBoard ? undefined : 'No board synced. Reconnect Pinterest in Buffer to sync your board.',
+          });
+        } else {
+          const label = ch.service === 'facebook' ? 'Facebook Page'
+                      : `${ch.name} (${ch.service})`;
+          results.push({
+            platform: 'buffer',
+            name: `[Acct 2] ${label}`,
+            success: true,
+            id: ch.id,
+          });
         }
-
-        results.push({
-          platform: 'buffer',
-          name: `[Acct 2] ${label}`,
-          success: true,
-          id: ch.id,
-        });
       }
     } catch (err: any) {
       results.push({
