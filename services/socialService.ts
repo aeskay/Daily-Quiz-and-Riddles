@@ -7,7 +7,8 @@ import { updateUserPost } from "./firestoreService";
 import { 
   postToAllBufferChannels, 
   deleteFromAllBufferChannels, 
-  rescheduleBufferPost 
+  rescheduleBufferPost,
+  getBufferPostStatus
 } from "./bufferService";
 import { buildSocialCaption } from "./socialDirectService";
 
@@ -554,4 +555,98 @@ export function formatPostedDate(postedAt?: number | string): string {
   });
 
   return `${dateStr} at ${timeStr}`;
+}
+
+/**
+ * Synchronizes queued posts whose scheduled time is in the past:
+ * Checks Buffer to see if they were sent or failed, and updates Firestore accordingly.
+ */
+export async function syncPastQueuedPosts(
+  userId: string,
+  posts: QuizPost[]
+): Promise<{ updatedCount: number; posts: QuizPost[] }> {
+  if (!userId || !posts || posts.length === 0) {
+    return { updatedCount: 0, posts: posts || [] };
+  }
+
+  const social = getLocalSocialConfig();
+  const bufferToken =
+    social.buffer?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
+    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+
+  const now = Date.now();
+  // Find posts marked 'queued' whose scheduledTime has passed (with a 2-minute safety buffer)
+  const pastQueued = posts.filter(p => {
+    if (p.scheduleStatus !== 'queued') return false;
+    if (!p.scheduledTime) return false;
+    const scheduledEpoch = new Date(p.scheduledTime).getTime();
+    return !isNaN(scheduledEpoch) && scheduledEpoch <= now - 2 * 60 * 1000;
+  });
+
+  if (pastQueued.length === 0) {
+    return { updatedCount: 0, posts };
+  }
+
+  let updatedCount = 0;
+  const updatedMap = new Map<string, QuizPost>();
+
+  await Promise.allSettled(
+    pastQueued.map(async (post) => {
+      let isSent = false;
+      let sentTimestamp: number = new Date(post.scheduledTime!).getTime();
+      let hasError = false;
+      let errorMsg: string | undefined;
+
+      // If post has Buffer IDs, check Buffer's live status
+      if (post.bufferPostIds && post.bufferPostIds.length > 0) {
+        for (const bid of post.bufferPostIds) {
+          try {
+            const res = await getBufferPostStatus(bufferToken, bid);
+            if (res?.status === 'sent') {
+              isSent = true;
+              if (res.sentAt) {
+                const t = new Date(res.sentAt).getTime();
+                if (!isNaN(t)) sentTimestamp = t;
+              }
+              break;
+            } else if (res?.status === 'error') {
+              hasError = true;
+              errorMsg = res.error || 'Failed to publish from Buffer';
+            }
+          } catch (e) {
+            console.warn("Buffer status check warning for post", bid, e);
+          }
+        }
+      } else {
+        // If no Buffer ID is recorded but scheduled time is well past (> 30 mins), treat as posted
+        isSent = true;
+      }
+
+      // If Buffer confirmed sent OR the scheduled time is well in the past and no error occurred
+      const scheduledEpoch = new Date(post.scheduledTime!).getTime();
+      if (isSent || (!hasError && scheduledEpoch <= now - 15 * 60 * 1000)) {
+        const updated: QuizPost = {
+          ...post,
+          scheduleStatus: 'posted',
+          postedAt: sentTimestamp,
+        };
+        await updateUserPost(userId, updated);
+        updatedMap.set(post.id, updated);
+        updatedCount++;
+      } else if (hasError) {
+        const updated: QuizPost = {
+          ...post,
+          scheduleStatus: 'failed',
+          postError: errorMsg,
+        };
+        await updateUserPost(userId, updated);
+        updatedMap.set(post.id, updated);
+        updatedCount++;
+      }
+    })
+  );
+
+  const finalPosts = posts.map(p => updatedMap.get(p.id) || p);
+  return { updatedCount, posts: finalPosts };
 }

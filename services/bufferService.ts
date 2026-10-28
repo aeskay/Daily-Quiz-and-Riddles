@@ -333,3 +333,48 @@ export async function rescheduleBufferPost(
     return { success: false, error: err?.message || String(err) };
   }
 }
+
+/**
+ * Queries the current publication status of a post in Buffer by its post ID
+ */
+export async function getBufferPostStatus(
+  accessToken: string,
+  postId: string
+): Promise<{ status: 'sent' | 'scheduled' | 'error' | 'draft' | 'unknown'; sentAt?: string; error?: string } | null> {
+  try {
+    const query = `
+      query GetPost($input: PostInput!) {
+        post(input: $input) {
+          id
+          status
+          sentAt
+          error {
+            message
+          }
+        }
+      }
+    `;
+    const endpoint = getBufferEndpoint();
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken.trim()}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables: { input: { id: postId.trim() } },
+      }),
+    });
+    const data = await res.json();
+    const p = data?.data?.post;
+    if (!p) return null;
+    return {
+      status: p.status,
+      sentAt: p.sentAt,
+      error: p.error?.message,
+    };
+  } catch {
+    return null;
+  }
+}

@@ -4,7 +4,7 @@ import {
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
   Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
   Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon,
-  Clock, Globe
+  Clock, Globe, RefreshCw
 } from 'lucide-react';
 import { QuizPost, Category, ViewMode } from './types';
 import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
@@ -28,7 +28,8 @@ import {
   getQueuedScheduleInfo, 
   formatPostedDate, 
   unqueuePost, 
-  realignQueuedPosts 
+  realignQueuedPosts,
+  syncPastQueuedPosts
 } from './services/socialService';
 import { dispatchPostDirectly, parseWyr, stripHookFromQuestion } from './services/socialDirectService';
 
@@ -348,6 +349,41 @@ const App: React.FC = () => {
     }
   };
 
+  const [isSyncingQueue, setIsSyncingQueue] = useState(false);
+
+  const handleSyncQueue = async (manual: boolean = false) => {
+    if (!currentUser || isSyncingQueue) return;
+    const now = Date.now();
+    const hasPastQueued = allPosts.some(
+      p => p.scheduleStatus === 'queued' && p.scheduledTime && new Date(p.scheduledTime).getTime() <= now - 60000
+    );
+    if (!hasPastQueued && !manual) return;
+
+    setIsSyncingQueue(true);
+    try {
+      const { updatedCount } = await syncPastQueuedPosts(currentUser.uid, allPosts);
+      if (updatedCount > 0) {
+        setSuccessMsg(`Synced ${updatedCount} published post${updatedCount > 1 ? 's' : ''} from queue to Posted!`);
+      } else if (manual) {
+        setSuccessMsg("Queue is up to date with Buffer.");
+      }
+    } catch (err: any) {
+      console.warn("Queue sync warning:", err);
+      if (manual) {
+        setError("Failed to sync queue with Buffer: " + (err?.message || err));
+      }
+    } finally {
+      setIsSyncingQueue(false);
+    }
+  };
+
+  // Automatically check and sync past queued posts whenever the user opens the Queue view or posts load
+  useEffect(() => {
+    if (viewMode === ViewMode.Queue && currentUser) {
+      handleSyncQueue(false);
+    }
+  }, [viewMode, currentUser, allPosts.length]);
+
   const handleExport = async () => {
     try {
       const data = JSON.stringify(allPosts, null, 2);
@@ -636,41 +672,54 @@ const App: React.FC = () => {
 
           {/* Autopost Queue Tabs vs Feed Content Buttons */}
           {viewMode === ViewMode.Queue ? (
-            <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 self-stretch sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setQueueSubTab('queued')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  queueSubTab === 'queued'
-                    ? 'bg-[#0477CF] text-white shadow-md'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
-              >
-                <Clock size={15} />
-                <span>In Queue</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  queueSubTab === 'queued' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-400'
-                }`}>
-                  {stats.queued}
-                </span>
-              </button>
+            <div className="flex items-center gap-2 flex-wrap self-stretch sm:self-auto">
+              <div className="flex items-center gap-1.5 bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 flex-1 sm:flex-none">
+                <button
+                  type="button"
+                  onClick={() => setQueueSubTab('queued')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                    queueSubTab === 'queued'
+                      ? 'bg-[#0477CF] text-white shadow-md'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Clock size={15} />
+                  <span>In Queue</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    queueSubTab === 'queued' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {stats.queued}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setQueueSubTab('posted')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
+                    queueSubTab === 'posted'
+                      ? 'bg-emerald-600 text-white shadow-md'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                >
+                  <Check size={15} />
+                  <span>Posted</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    queueSubTab === 'posted' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-400'
+                  }`}>
+                    {stats.posted}
+                  </span>
+                </button>
+              </div>
 
               <button
                 type="button"
-                onClick={() => setQueueSubTab('posted')}
-                className={`flex-1 sm:flex-none px-4 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  queueSubTab === 'posted'
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'text-zinc-400 hover:text-white'
-                }`}
+                onClick={() => handleSyncQueue(true)}
+                disabled={isSyncingQueue}
+                className="px-3.5 py-2.5 bg-zinc-900/90 hover:bg-zinc-800 border border-zinc-800 text-zinc-300 hover:text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 shrink-0 shadow"
+                title="Sync queued posts with Buffer to mark published posts as Posted"
               >
-                <Check size={15} />
-                <span>Posted</span>
-                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                  queueSubTab === 'posted' ? 'bg-white/20 text-white' : 'bg-zinc-800 text-zinc-400'
-                }`}>
-                  {stats.posted}
-                </span>
+                <RefreshCw size={14} className={isSyncingQueue ? "animate-spin text-blue-400" : "text-zinc-400"} />
+                <span className="hidden sm:inline">{isSyncingQueue ? "Syncing..." : "Sync Buffer"}</span>
               </button>
             </div>
           ) : (
