@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, CheckCircle2, Info, Share2, Download, 
   Image as ImageIcon, Loader2, Upload, 
-  Search, Edit3, ChevronRight, Clock, Send, Check, BookOpen, Globe, ExternalLink
+  Search, Edit3, ChevronRight, Clock, Send, Check, BookOpen, Globe, ExternalLink, Sparkles
 } from 'lucide-react';
 import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
