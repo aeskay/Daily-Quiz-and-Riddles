@@ -376,108 +376,46 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                 />
               </div>
 
-              {/* Unified Buffer Multi-Channel Pipeline */}
-              <div className="border border-zinc-800 bg-zinc-950/80 p-4 rounded-2xl space-y-4">
+              {/* Buffer Multi-Channel Publishing */}
+              <div className="border border-zinc-800 bg-zinc-950/80 p-4 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white flex items-center gap-2">
-                      <Share2 size={16} className="text-[#0477CF]" /> Buffer Multi-Channel Publishing
-                    </span>
-                    <a href="https://publish.buffer.com" target="_blank" rel="noreferrer" className="text-[10px] text-[#0477CF] hover:underline">
-                      publish.buffer.com &rarr;
-                    </a>
+                    <Share2 size={16} className="text-[#0477CF]" />
+                    <span className="font-bold text-sm text-white">Buffer Publishing</span>
                   </div>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-0.5 rounded-full">
-                    3/3 Channels Connected
-                  </span>
+                  <a href="https://publish.buffer.com" target="_blank" rel="noreferrer" className="text-[11px] text-[#0477CF] hover:underline">
+                    publish.buffer.com &rarr;
+                  </a>
                 </div>
 
-                <p className="text-[11px] text-zinc-400">
-                  Buffer automatically publishes your cards to all 4 destinations (Instagram + FB cross-post, TikTok, and Twitter / X) with zero developer portal setups.
-                </p>
-
-                {/* Connected Channels Summary Cards */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
-                    <span className="text-base">📸</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white truncate">quiz_riddles_</div>
-                      <div className="text-[10px] text-zinc-400">Instagram (+ FB Page)</div>
-                    </div>
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
-                    <span className="text-base">🎵</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white truncate">quiz_riddles1</div>
-                      <div className="text-[10px] text-zinc-400">TikTok</div>
-                    </div>
-                  </div>
-                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
-                    <span className="text-base">𝕏</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-bold text-white truncate">quiz_riddles</div>
-                      <div className="text-[10px] text-zinc-400">Twitter / X</div>
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label className="text-[10px] text-zinc-400 font-bold uppercase tracking-wider">Account 1 Token (IG, TikTok, X)</label>
-                    <span className="text-[9px] text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded">Primary (3 channels)</span>
-                  </div>
-                  <input
-                    type="password"
-                    placeholder="Primary Buffer Token"
-                    value={socialConfig.buffer?.accessToken || (process.env.VITE_BUFFER_ACCESS_TOKEN || '')}
-                    onChange={(e) => setSocialConfig({
-                      ...socialConfig,
-                      buffer: {
-                        accessToken: e.target.value,
-                        channelId: socialConfig.buffer?.channelId || '6ada7779778b240e2f9221b8',
-                        enabled: true
-                      }
-                    })}
-                    className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
-                  />
-                </div>
-
-                {/* Secondary Buffer Account (Pinterest & Facebook) */}
-                <div className="pt-3 border-t border-zinc-850 space-y-2">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <span className="text-xs font-bold text-white flex items-center gap-1.5">
-                        <Share2 size={13} className="text-[#0477CF]" /> Secondary Buffer Account (Pinterest & Facebook)
-                      </span>
-                      <p className="text-[10px] text-zinc-400 mt-0.5">
-                        Broadcasts to Facebook Page & Pinterest simultaneously via your second free Buffer account.
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Account 2 Channel Preview Badges */}
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
-                      <span className="text-base">📌</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-white truncate">quiz_riddles</div>
-                        <div className="text-[10px] text-zinc-400">Pinterest (Pins)</div>
-                      </div>
-                    </div>
-                    <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-2.5 flex items-center gap-2.5">
-                      <span className="text-base">👤</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-xs font-bold text-white truncate">Daily Quiz & Riddles</div>
-                        <div className="text-[10px] text-zinc-400">Facebook Page</div>
-                      </div>
-                    </div>
+                <div className="space-y-3 pt-1">
+                  <div>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                      Account 1 Token <span className="text-zinc-500 font-normal">(Instagram, TikTok, Twitter/X)</span>
+                    </label>
+                    <input
+                      type="password"
+                      placeholder="Primary Buffer Access Token"
+                      value={socialConfig.buffer?.accessToken || (process.env.VITE_BUFFER_ACCESS_TOKEN || '')}
+                      onChange={(e) => setSocialConfig({
+                        ...socialConfig,
+                        buffer: {
+                          accessToken: e.target.value.trim(),
+                          channelId: socialConfig.buffer?.channelId || '6ada7779778b240e2f9221b8',
+                          enabled: true
+                        }
+                      })}
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
+                    />
                   </div>
 
                   <div>
-                    <label className="text-[10px] text-zinc-400 block mb-1">Account 2 Buffer Token (Pinterest & FB)</label>
+                    <label className="block text-xs font-semibold text-zinc-300 mb-1">
+                      Account 2 Token <span className="text-zinc-500 font-normal">(Facebook Page, Pinterest)</span>
+                    </label>
                     <input
                       type="password"
-                      placeholder="Paste 2nd Buffer Access Token here"
+                      placeholder="Secondary Buffer Access Token"
                       value={socialConfig.bufferSecondary?.accessToken || ''}
                       onChange={(e) => setSocialConfig({
                         ...socialConfig,
@@ -488,50 +426,36 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
                       })}
                       className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
                     />
-                    <p className="text-[10px] text-amber-400/90 mt-1">
-                      💡 <strong>Pinterest Note:</strong> Make sure you have at least 1 Board created in your Pinterest account (e.g. named <em>Daily Quiz and Riddles</em>) so Buffer has a destination board for pins.
-                    </p>
                   </div>
                 </div>
-              </div>
 
-              {/* Diagnostic Test Box */}
-              <div className="border border-blue-500/30 bg-blue-500/5 p-4 rounded-2xl space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                  <div>
-                    <span className="font-bold text-sm text-white flex items-center gap-2">
-                      <Sparkles size={16} className="text-[#0477CF]" /> Verify Buffer Channel Connections
-                    </span>
-                    <p className="text-[11px] text-zinc-400 mt-0.5">
-                      Verifies that your Buffer token is active and confirms all 3 channels are reachable (without posting test spam).
-                    </p>
-                  </div>
+                <div className="pt-2 flex items-center justify-between">
                   <button
                     type="button"
                     onClick={handleTestAllSocials}
                     disabled={isTestingSocials}
-                    className="px-4 py-2 bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-md transition-all active:scale-95 flex items-center justify-center gap-1.5 shrink-0"
+                    className="px-3.5 py-2 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-white font-semibold text-xs rounded-xl transition-all flex items-center gap-1.5"
                   >
-                    {isTestingSocials ? <Loader2 size={14} className="animate-spin" /> : <Check size={14} />}
-                    {isTestingSocials ? 'Verifying...' : '⚡ Verify Channels'}
+                    {isTestingSocials ? <Loader2 size={13} className="animate-spin text-[#0477CF]" /> : <Check size={13} />}
+                    <span>{isTestingSocials ? 'Verifying Channels...' : 'Verify Channels'}</span>
                   </button>
                 </div>
 
                 {socialTestResults && (
-                  <div className="space-y-2 pt-2 border-t border-zinc-800">
+                  <div className="space-y-1.5 pt-2 border-t border-zinc-850">
                     {socialTestResults.map((r, i) => (
                       <div
                         key={i}
-                        className={`p-2.5 rounded-xl text-xs flex items-center justify-between gap-2 border ${
+                        className={`p-2 rounded-xl text-xs flex items-center justify-between border ${
                           r.success
-                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-                            : 'bg-red-500/10 border-red-500/30 text-red-300'
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                            : 'bg-red-500/10 border-red-500/20 text-red-300'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          {r.success ? <Check size={14} className="text-emerald-400 shrink-0" /> : <AlertCircle size={14} className="text-red-400 shrink-0" />}
-                          <span className="font-bold">{r.name}:</span>
-                          <span>{r.success ? `Connected & Ready` : `Failed (${r.error})`}</span>
+                          {r.success ? <Check size={13} className="text-emerald-400 shrink-0" /> : <AlertCircle size={13} className="text-red-400 shrink-0" />}
+                          <span className="font-semibold">{r.name}:</span>
+                          <span className="text-zinc-300">{r.success ? 'Connected & Ready' : `Failed (${r.error})`}</span>
                         </div>
                       </div>
                     ))}

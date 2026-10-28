@@ -187,7 +187,7 @@ export async function dispatchPostDirectly(
   const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+    '';
   if (primaryToken) bufferTokens.push(primaryToken);
 
   const secondaryToken =
@@ -248,7 +248,7 @@ export async function testAllSocialIntegrations(social: SocialConfig): Promise<S
   const primaryToken =
     social.buffer?.accessToken ||
     (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+    '';
 
   const secondaryToken =
     social.bufferSecondary?.accessToken ||
