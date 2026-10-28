@@ -70,6 +70,9 @@ export interface QuizPost {
   wpPostUrl?: string;
   wpStatus?: 'draft' | 'publish' | 'future';
   wpPublishedAt?: number;
+  wpTags?: string[];
+  wpMetaDescription?: string;
+  wpFocusKeyword?: string;
 }
 
 export interface WordPressConfig {

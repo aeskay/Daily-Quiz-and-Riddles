@@ -318,39 +318,25 @@ export async function queuePostForAutopost(
 
   const dueAtIso = targetDate.toISOString();
   const imageUrl = renderedImageUrl || post.renderedImageUrl || post.imageUrl;
-  const caption = buildSocialCaption(post);
-
-  const bufferToken =
-    social.buffer?.accessToken ||
-    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
-    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
-
-  // Push directly to Buffer with exact dueAt timestamp!
-  const res = await postToAllBufferChannels(
-    bufferToken,
-    caption,
-    imageUrl && imageUrl.startsWith('http') ? imageUrl : undefined,
-    'customScheduled',
-    dueAtIso
-  );
 
   let updated: QuizPost = {
     ...post,
     scheduleStatus: 'queued',
     scheduledTime: dueAtIso,
     renderedImageUrl: imageUrl,
-    postedPlatforms: res.platforms,
-    bufferPostIds: res.ids,
-    postError: res.errors.length > 0 ? res.errors.join(' | ') : undefined,
   };
 
-  // If WordPress auto-publish with queue is enabled, automatically generate & schedule article on WordPress
+  // If WordPress auto-publish with queue is enabled, generate & schedule article on WordPress first
+  // so the live WordPress article URL can be automatically included in the social post caption!
   const wpConfig = getLocalWordPressConfig();
   if (wpConfig.enabled && wpConfig.autoPublishWithQueue && (!post.wpStatus || post.wpStatus === 'draft' || post.wpStatus === 'future')) {
     try {
       let articleHtml = post.articleContent;
       if (!articleHtml || !articleHtml.trim()) {
-        articleHtml = await generateArticleForPost(post);
+        const related = existingPosts
+          ? existingPosts.filter(p => p.id !== post.id && p.wpPostUrl && p.category === post.category)
+          : [];
+        articleHtml = await generateArticleForPost(post, related);
         updated.articleContent = articleHtml;
       }
 
@@ -373,6 +359,30 @@ export async function queuePostForAutopost(
       console.warn("WordPress auto-schedule during queue failed (continuing with social queue):", wpErr);
     }
   }
+
+  // Build social caption (will include the WordPress article link if generated above!)
+  const caption = buildSocialCaption(updated);
+
+  const bufferToken =
+    social.buffer?.accessToken ||
+    (typeof process !== 'undefined' && process.env?.VITE_BUFFER_ACCESS_TOKEN) ||
+    'i-mLlsruAUr7fE3HtY4tkZY5L1tAwLweU1ihZK3etwT';
+
+  // Push directly to Buffer with exact dueAt timestamp!
+  const res = await postToAllBufferChannels(
+    bufferToken,
+    caption,
+    imageUrl && imageUrl.startsWith('http') ? imageUrl : undefined,
+    'customScheduled',
+    dueAtIso
+  );
+
+  updated = {
+    ...updated,
+    postedPlatforms: res.platforms,
+    bufferPostIds: res.ids,
+    postError: res.errors.length > 0 ? res.errors.join(' | ') : undefined,
+  };
 
   await updateUserPost(userId, updated);
   return { post: updated, platforms: res.platforms, errors: res.errors };

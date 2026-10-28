@@ -72,7 +72,9 @@ const App: React.FC = () => {
   const handleGenerateArticle = async (post: QuizPost) => {
     setIsGeneratingArticle(true);
     try {
-      const html = await generateArticleForPost(post);
+      // Find published posts in the same category for internal SEO interlinking
+      const related = allPosts.filter(p => p.id !== post.id && p.wpPostUrl && p.category === post.category);
+      const html = await generateArticleForPost(post, related);
       setArticleHtmlDraft(html);
       const updated: QuizPost = {
         ...post,

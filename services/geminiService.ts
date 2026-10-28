@@ -167,7 +167,10 @@ Ensure the visual_text is clean and punchy, caption_hook is a viral 1-sentence t
  * - <h2>Answer:</h2>
  * - <h2>Explanation:</h2> with hook, step-by-step breakdown list, and engaging conclusion.
  */
-export async function generateArticleForPost(post: QuizPost): Promise<string> {
+export async function generateArticleForPost(
+  post: QuizPost,
+  relatedPosts?: QuizPost[]
+): Promise<string> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new Error("Missing Gemini API Key. Click 'Settings' in the sidebar to add your key.");
@@ -178,34 +181,83 @@ export async function generateArticleForPost(post: QuizPost): Promise<string> {
                        post.category === 'Brain Teasers' ? 'Brain Teaser' :
                        post.category === 'Find the Mistake' ? 'Challenge' : 'Question';
 
-  const systemPrompt = `You are the chief content creator for "Daily Quiz and Riddles" (quizandriddles.com).
-Your task is to write a captivating, engaging, SEO-rich blog article for a given riddle or puzzle.
+  // Build internal links if related published posts are provided
+  let interlinkingInstructions = '';
+  if (relatedPosts && relatedPosts.length > 0) {
+    const validLinks = relatedPosts
+      .filter(p => p.id !== post.id && p.wpPostUrl)
+      .slice(0, 3)
+      .map(p => {
+        let cleanTitle = p.visual_text || p.category;
+        if (cleanTitle.includes('|')) cleanTitle = cleanTitle.split('|')[0].trim();
+        return `<li><a href="${p.wpPostUrl}" style="color: #0477CF; font-weight: 600; text-decoration: underline;">${cleanTitle}</a></li>`;
+      });
+
+    if (validLinks.length > 0) {
+      interlinkingInstructions = `
+### MANDATORY INTERNAL INTERLINKING SECTION:
+At the very end of the article (before the schema script), include this exact HTML block:
+<div class="dqr-related-posts" style="margin-top: 36px; padding: 20px; background: #F1F5F9; border-radius: 12px; border: 1px solid #E2E8F0;">
+  <h3 style="margin-top: 0; color: #0F172A; font-size: 1.1rem; font-weight: 700;">🔥 Can You Solve These Next?</h3>
+  <ul style="padding-left: 20px; margin-bottom: 0;">
+    ${validLinks.join('\n    ')}
+  </ul>
+</div>`;
+    }
+  }
+
+  const systemPrompt = `You are the chief content creator and SEO specialist for "Daily Quiz and Riddles" (quizandriddles.com).
+Your task is to write a captivating, engaging, SEO-rich blog article adhering strictly to our interactive reveal format for high dwell time and Google ranking.
 
 ### ARTICLE STYLE REQUIREMENTS (MANDATORY FORMAT):
 You must output clean semantic HTML (no markdown code blocks, just raw HTML) adhering strictly to this structure:
 
 <h2>${sectionLabel}:</h2>
-<p>[The exact riddle or question clearly formatted]</p>
+<p style="font-size: 1.15rem; line-height: 1.6; margin-bottom: 24px;">[The exact riddle or question clearly formatted]</p>
 
-<h2>Answer:</h2>
-<p><strong>[The exact answer in bold]</strong></p>
+<details class="dqr-reveal-box" style="margin: 28px 0; border: 2px dashed #0477CF; border-radius: 16px; background-color: #F8FAFC; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+  <summary style="font-weight: 700; font-size: 1.1rem; color: #0477CF; padding: 18px 24px; cursor: pointer; user-select: none; background: #EFF6FF; border-bottom: 1px solid #DBEAFE; list-style: none;">
+    💡 Click to Reveal Answer & Step-by-Step Explanation
+  </summary>
+  <div style="padding: 24px;">
+    <h2 style="color: #0F172A; margin-top: 0;">Answer:</h2>
+    <p style="font-size: 1.25rem; font-weight: 700; color: #16A34A; background: #DCFCE7; padding: 12px 18px; border-radius: 8px; border-left: 4px solid #16A34A; display: inline-block;"><strong>[The exact answer in bold]</strong></p>
+    
+    <h2 style="color: #0F172A; margin-top: 24px;">Explanation:</h2>
+    <p>[Engaging intro naming the concept or riddle type (e.g. "This riddle is called Look and Say Sequence"), welcoming readers, and hooking their curiosity]</p>
+    
+    <p>To crack this sequence, we need to carefully observe the pattern that governs its progression...</p>
+    
+    <p>Let's break it down step by step:</p>
+    <ul>
+      <li><strong>[Step/Term 1]:</strong> [Clear explanation]</li>
+      <li><strong>[Step/Term 2]:</strong> [Clear explanation]</li>
+      <li><strong>[Step/Term 3]:</strong> [Clear explanation]</li>
+      [Add enough bullet points to completely and thoroughly walk through the solution]
+    </ul>
+    
+    <p>Now, what comes next in this intriguing sequence? Applying the pattern, we find: <strong>[Answer]</strong></p>
+    
+    <p>[Engaging concluding takeaway celebrating the reader's observation and encouraging them to share with friends and family.]</p>
+  </div>
+</details>
+${interlinkingInstructions}
 
-<h2>Explanation:</h2>
-<p>[Engaging intro naming the concept or riddle type (e.g. "This riddle is called Look and Say Sequence"), welcoming readers, and hooking their curiosity]</p>
-
-<p>To crack this sequence, we need to carefully observe the pattern that governs its progression...</p>
-
-<p>Let's break it down step by step:</p>
-<ul>
-  <li><strong>[Step/Term 1]:</strong> [Clear explanation]</li>
-  <li><strong>[Step/Term 2]:</strong> [Clear explanation]</li>
-  <li><strong>[Step/Term 3]:</strong> [Clear explanation]</li>
-  [Add enough bullet points to completely and thoroughly walk through the solution]
-</ul>
-
-<p>Now, what comes next in this intriguing sequence? Applying the pattern, we find: <strong>[Answer]</strong></p>
-
-<p>[Engaging concluding takeaway celebrating the reader's observation and encouraging them to share with friends and family.]</p>
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "QAPage",
+  "mainEntity": {
+    "@type": "Question",
+    "name": "[Clean Question Title without special markup]",
+    "text": "[The exact riddle or question text]",
+    "acceptedAnswer": {
+      "@type": "Answer",
+      "text": "[The exact answer with brief solution summary]"
+    }
+  }
+}
+</script>
 
 Ensure the explanation is 100% mathematically, logically, or factually accurate.`;
 

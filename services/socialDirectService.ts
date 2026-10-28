@@ -145,22 +145,25 @@ export function getDefaultCategoryHook(category?: string): string {
  */
 export function buildSocialCaption(post: QuizPost): string {
   const header = getCategoryHeader(post.category);
+  let mainText = '';
 
   if (post.category === 'Would you rather') {
-    return `${header}\n\nWhich one are you choosing?`;
+    mainText = 'Which one are you choosing?';
+  } else if (post.caption_hook && post.caption_hook.trim()) {
+    mainText = post.caption_hook.trim();
+  } else {
+    const { hook } = stripHookFromQuestion(post.question || '');
+    mainText = hook || getDefaultCategoryHook(post.category);
   }
 
-  if (post.caption_hook && post.caption_hook.trim()) {
-    return `${header}\n\n${post.caption_hook.trim()}`;
+  let caption = `${header}\n\n${mainText}`;
+
+  // If a WordPress article is published or scheduled, add the teaser CTA link!
+  if (post.wpPostUrl && post.wpPostUrl.startsWith('http')) {
+    caption += `\n\n👉 Full explanation & answer breakdown: ${post.wpPostUrl}`;
   }
 
-  const { hook } = stripHookFromQuestion(post.question || '');
-  if (hook) {
-    return `${header}\n\n${hook}`;
-  }
-
-  const fallbackHook = getDefaultCategoryHook(post.category);
-  return `${header}\n\n${fallbackHook}`;
+  return caption;
 }
 
 /**
