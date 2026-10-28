@@ -1,30 +1,43 @@
 import React from 'react';
 import {
-  Zap,
-  Binary,
-  Globe,
-  BookOpen,
   HelpCircle,
+  Binary,
+  Brain,
+  Zap,
+  AlertCircle,
+  Sparkles,
   Split,
   Leaf,
-  Brain
+  BookOpen
 } from 'lucide-react';
 import { Category } from './types';
 
 export const CATEGORIES_CONFIG = [
-  { name: Category.LogicMath, icon: <Binary className="w-5 h-5" />, color: 'text-blue-600' },
-  { name: Category.ScienceTech, icon: <Zap className="w-5 h-5" />, color: 'text-yellow-600' },
-  { name: Category.GeneralKnowledge, icon: <Globe className="w-5 h-5" />, color: 'text-emerald-600' },
-  { name: Category.LanguageLit, icon: <BookOpen className="w-5 h-5" />, color: 'text-purple-600' },
   { name: Category.Riddles, icon: <HelpCircle className="w-5 h-5" />, color: 'text-pink-600' },
-  { name: Category.NatureAnimals, icon: <Leaf className="w-5 h-5" />, color: 'text-green-600' },
-  { name: Category.Psychology, icon: <Brain className="w-5 h-5" />, color: 'text-indigo-600' },
-  { name: Category.WouldYouRather, icon: <Split className="w-5 h-5" />, color: 'text-orange-600' },
+  { name: Category.Puzzles, icon: <Binary className="w-5 h-5" />, color: 'text-blue-600' },
+  { name: Category.BrainTeasers, icon: <Brain className="w-5 h-5" />, color: 'text-purple-600' },
+  { name: Category.Quiz, icon: <Zap className="w-5 h-5" />, color: 'text-yellow-600' },
+  { name: Category.FindTheMistake, icon: <AlertCircle className="w-5 h-5" />, color: 'text-rose-600' },
+  { name: Category.Misconceptions, icon: <Sparkles className="w-5 h-5" />, color: 'text-indigo-600' },
+  { name: Category.Controversial, icon: <Split className="w-5 h-5" />, color: 'text-orange-600' },
+  { name: Category.FunFacts, icon: <Leaf className="w-5 h-5" />, color: 'text-emerald-600' },
+  { name: Category.Blogs, icon: <BookOpen className="w-5 h-5" />, color: 'text-teal-600' },
 ];
 
-export const SYSTEM_INSTRUCTIONS = `You are a viral TikTok, Instagram Reels, and YouTube Shorts content creator for "Daily Quiz and Riddles" (5M+ followers).
+export const SYSTEM_INSTRUCTIONS = `You are a viral content creator and writer for "Daily Quiz and Riddles" (quizandriddles.com & 5M+ social followers).
 Your audience has a 3-second attention span and will swipe away instantly if a post looks like school homework or a textbook exam.
-Your #1 metric is TIKTOK VIRALITY: posts that trigger thousands of comments, debates, friends tagging each other, and "wait, what?!" reactions.
+Your #1 metric is TIKTOK & BLOG VIRALITY: content that triggers thousands of comments, debates, friends tagging each other, and "wait, what?!" reactions.
+
+### OFFICIAL CATEGORIES:
+- "Riddles": Wordplay, clever double meanings, situational mysteries with an immediate "Aha!" moment.
+- "Puzzles": Number sequences (e.g. Look & Say, Fibonacci twists), viral math disputes (e.g. 5+5×5-5), geometry logic.
+- "Brain Teasers": Lateral thinking, fast reflex traps (e.g. overtaking the 2nd person in a race), tricky word riddles.
+- "Quiz": Surprising trivia questions with clear, fascinating answers.
+- "Find the Mistake": Spot the hidden error in a sentence, equation, or visual scenario.
+- "Misconceptions": Debunking widespread psychology, historical, and everyday human myths.
+- "Controversial": Would You Rather dilemmas, moral conundrums, and intense discussion starters.
+- "Fun Facts": Mind-blowing "NO WAY!" facts (e.g. hippo pink milk, Mars blue sunsets).
+- "Blogs": In-depth articles exploring sequences, riddles, or logic phenomena.
 
 ### STRICT BAN LIST — ZERO SCHOOL HOMEWORK QUESTIONS:
 - NO HIGH SCHOOL / COLLEGE EXAM QUESTIONS:

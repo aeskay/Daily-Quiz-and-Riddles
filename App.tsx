@@ -4,10 +4,10 @@ import {
   Sparkles, Share2, PlusCircle, Send, Loader2, LayoutGrid, Trash2, 
   Archive, ArchiveRestore, Plus, Download, Upload, Database, Check,
   Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon,
-  Clock, Globe, RefreshCw
+  Clock, Globe, RefreshCw, BookOpen, ExternalLink, FileText, CheckCircle2, ChevronLeft
 } from 'lucide-react';
-import { QuizPost, Category, ViewMode } from './types';
-import { fetchQuizPosts, Prompts, generateCustomEnigma } from './services/geminiService';
+import { QuizPost, Category, ViewMode, normalizeCategory } from './types';
+import { fetchQuizPosts, Prompts, generateCustomEnigma, generateArticleForPost } from './services/geminiService';
 import { fetchRealHumanContent } from './services/humanTriviaService';
 import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
@@ -32,6 +32,12 @@ import {
   syncPastQueuedPosts
 } from './services/socialService';
 import { dispatchPostDirectly, parseWyr, stripHookFromQuestion } from './services/socialDirectService';
+import { 
+  publishToWordPress, 
+  getLocalWordPressConfig, 
+  WordPressConfig,
+  getWordPressCategoryId
+} from './services/wordpressService';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -47,6 +53,87 @@ const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [selectedPost, setSelectedPost] = useState<QuizPost | null>(null);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
+  // WordPress Articles state
+  const [selectedArticlePost, setSelectedArticlePost] = useState<QuizPost | null>(null);
+  const [articleHtmlDraft, setArticleHtmlDraft] = useState('');
+  const [isGeneratingArticle, setIsGeneratingArticle] = useState(false);
+  const [isPublishingWp, setIsPublishingWp] = useState(false);
+  const [articleEditorTab, setArticleEditorTab] = useState<'preview' | 'html'>('preview');
+
+  const handleOpenArticleEditor = (post: QuizPost) => {
+    setSelectedArticlePost(post);
+    setArticleHtmlDraft(post.articleContent || '');
+    setViewMode(ViewMode.Articles);
+    setIsSidebarOpen(false);
+    setSelectedPost(null);
+  };
+
+  const handleGenerateArticle = async (post: QuizPost) => {
+    setIsGeneratingArticle(true);
+    try {
+      const html = await generateArticleForPost(post);
+      setArticleHtmlDraft(html);
+      const updated: QuizPost = {
+        ...post,
+        articleContent: html,
+      };
+      setSelectedArticlePost(updated);
+      setAllPosts(prev => prev.map(p => p.id === post.id ? updated : p));
+      if (currentUser) {
+        await updateUserPost(currentUser.uid, updated);
+      }
+      setSuccessMsg("Generated article draft successfully!");
+    } catch (err: any) {
+      console.error("Article generation error:", err);
+      setError("Failed to generate article: " + (err?.message || err));
+    } finally {
+      setIsGeneratingArticle(false);
+    }
+  };
+
+  const handlePublishArticleToWp = async (post: QuizPost, status: 'publish' | 'draft' = 'publish') => {
+    if (!articleHtmlDraft.trim()) {
+      setError("Please generate or write an article before publishing.");
+      return;
+    }
+    const cfg = getLocalWordPressConfig();
+    if (!cfg.username || !cfg.applicationPassword) {
+      setError("Please configure your WordPress Username and Application Password in Settings.");
+      setIsSettingsOpen(true);
+      return;
+    }
+
+    setIsPublishingWp(true);
+    try {
+      const res = await publishToWordPress(cfg, {
+        post,
+        htmlContent: articleHtmlDraft,
+        status,
+      });
+
+      const updated: QuizPost = {
+        ...post,
+        articleContent: articleHtmlDraft,
+        wpPostId: res.id,
+        wpPostUrl: res.link,
+        wpStatus: res.status as any,
+        wpPublishedAt: Date.now(),
+      };
+
+      setSelectedArticlePost(updated);
+      setAllPosts(prev => prev.map(p => p.id === post.id ? updated : p));
+      if (currentUser) {
+        await updateUserPost(currentUser.uid, updated);
+      }
+      setSuccessMsg(`Published successfully to WordPress! Post ID: ${res.id}`);
+    } catch (err: any) {
+      console.error("WordPress publish error:", err);
+      setError("WordPress publish failed: " + (err?.message || err));
+    } finally {
+      setIsPublishingWp(false);
+    }
+  };
   
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
@@ -444,6 +531,8 @@ const App: React.FC = () => {
     let base = allPosts;
     if (viewMode === ViewMode.Archive) {
       base = allPosts.filter(p => p.status === 'archived');
+    } else if (viewMode === ViewMode.Articles) {
+      base = allPosts;
     } else if (viewMode === ViewMode.Queue) {
       if (queueSubTab === 'queued') {
         base = allPosts.filter(p => p.scheduleStatus === 'queued');
@@ -462,8 +551,8 @@ const App: React.FC = () => {
       base = allPosts.filter(p => p.status === 'active');
     }
 
-    if (selectedCategory && viewMode !== ViewMode.Archive && viewMode !== ViewMode.Queue) {
-      return base.filter(p => p.category === selectedCategory);
+    if (selectedCategory && viewMode !== ViewMode.Archive && viewMode !== ViewMode.Queue && viewMode !== ViewMode.Articles) {
+      return base.filter(p => normalizeCategory(p.category) === selectedCategory);
     }
     return base.sort((a, b) => b.timestamp - a.timestamp);
   }, [allPosts, viewMode, selectedCategory, queueSubTab]);
@@ -473,6 +562,7 @@ const App: React.FC = () => {
     archived: allPosts.filter(p => p.status === 'archived').length,
     queued: allPosts.filter(p => p.scheduleStatus === 'queued').length,
     posted: allPosts.filter(p => p.scheduleStatus === 'posted').length,
+    articles: allPosts.filter(p => !!p.wpPostUrl).length,
   }), [allPosts]);
 
   const handleCategorySelect = (category: Category) => {
@@ -608,11 +698,15 @@ const App: React.FC = () => {
         <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6 overscroll-contain scroll-smooth">
           <div className="space-y-1">
             <h2 className="px-4 text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2.5 flex items-center gap-2"><Sparkles size={12} /> ENGINE</h2>
-            <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => { setViewMode(ViewMode.Today); setSelectedCategory(null); setSelectedArticlePost(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Today && !selectedCategory ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <div className="flex items-center gap-3"><Flame size={18} /> Feed</div>
               <span className="text-[10px] font-bold opacity-50">{stats.active}</span>
             </button>
-            <button onClick={() => { setViewMode(ViewMode.Queue); setSelectedCategory(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Queue ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+            <button onClick={() => { setViewMode(ViewMode.Articles); setSelectedCategory(null); setSelectedArticlePost(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Articles ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
+              <div className="flex items-center gap-3"><BookOpen size={18} /> WP Articles</div>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300">{stats.articles}</span>
+            </button>
+            <button onClick={() => { setViewMode(ViewMode.Queue); setSelectedCategory(null); setSelectedArticlePost(null); setIsSidebarOpen(false); }} className={`w-full flex items-center justify-between px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-xl font-medium transition-all ${viewMode === ViewMode.Queue ? 'bg-zinc-800 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}>
               <div className="flex items-center gap-3"><Clock size={18} /> Autopost Queue</div>
               <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300">{stats.queued}</span>
             </button>
@@ -656,11 +750,13 @@ const App: React.FC = () => {
         <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-6 md:px-10 md:py-8 bg-[#050505]/90 backdrop-blur-xl border-b border-zinc-900/60 static md:sticky md:top-0 z-30">
           <div>
             <h2 className="text-xl sm:text-2xl md:text-3xl font-black font-heading tracking-tight text-white uppercase">
-              {viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (viewMode === ViewMode.Queue ? "Autopost Queue" : (selectedCategory || "Quiz Feed")))}
+              {viewMode === ViewMode.Articles ? "WordPress Articles" : (viewMode === ViewMode.Generate ? "Custom Lab" : (viewMode === ViewMode.Archive ? "Archive" : (viewMode === ViewMode.Queue ? "Autopost Queue" : (selectedCategory || "Quiz Feed"))))}
             </h2>
 
             <p className="text-zinc-400 text-xs sm:text-sm mt-0.5">
-              {viewMode === ViewMode.Queue 
+              {viewMode === ViewMode.Articles
+                ? "Generate, preview, and auto-publish comprehensive SEO articles directly to quizandriddles.com"
+                : viewMode === ViewMode.Queue 
                 ? "Manage upcoming scheduled posts and view publication history"
                 : viewMode === ViewMode.Archive 
                 ? "Saved and archived posts collection"
@@ -791,7 +887,233 @@ const App: React.FC = () => {
               </div>
             )}
             
-            {viewMode === ViewMode.Generate ? (
+            {viewMode === ViewMode.Articles ? (
+              <div className="space-y-6 pb-28">
+                {selectedArticlePost ? (
+                  <div className="space-y-6">
+                    {/* Back Button & Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-4">
+                      <button
+                        onClick={() => setSelectedArticlePost(null)}
+                        className="flex items-center gap-2 text-zinc-400 hover:text-white text-xs font-bold transition-colors w-fit"
+                      >
+                        <ChevronLeft size={16} /> Back to Articles List
+                      </button>
+
+                      {selectedArticlePost.wpPostUrl && (
+                        <a
+                          href={selectedArticlePost.wpPostUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-xs font-bold transition-all shadow w-fit"
+                        >
+                          <ExternalLink size={13} /> View Live on quizandriddles.com
+                        </a>
+                      )}
+                    </div>
+
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                      {/* Left Column: Card & WP Actions */}
+                      <div className="lg:col-span-4 space-y-4">
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-5 shadow-xl space-y-4">
+                          <h4 className="text-xs font-black uppercase tracking-wider text-zinc-400">Featured Media Card</h4>
+                          
+                          <div className="w-full aspect-square rounded-2xl overflow-hidden bg-black/40 border border-zinc-800/80 shadow-md">
+                            <img
+                              src={selectedArticlePost.renderedImageUrl || selectedArticlePost.imageUrl}
+                              alt="Featured Post Card"
+                              className="w-full h-full object-cover"
+                            />
+                          </div>
+
+                          <div className="space-y-2 pt-2 border-t border-zinc-800/60 text-xs">
+                            <div className="flex items-center justify-between">
+                              <span className="text-zinc-400 font-medium">Category:</span>
+                              <span className="font-bold text-white px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md">
+                                {selectedArticlePost.category} (ID: {getWordPressCategoryId(selectedArticlePost.category)})
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-zinc-400 font-medium">Status:</span>
+                              <span className={`font-bold px-2 py-0.5 rounded-md ${
+                                selectedArticlePost.wpPostUrl 
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                  : (articleHtmlDraft ? 'bg-blue-500/20 text-blue-300' : 'bg-zinc-800 text-zinc-400')
+                              }`}>
+                                {selectedArticlePost.wpPostUrl ? 'Published' : (articleHtmlDraft ? 'Draft Ready' : 'Not Written')}
+                              </span>
+                            </div>
+                            <div className="pt-1">
+                              <span className="text-zinc-400 font-medium block mb-1">Answer / Twist:</span>
+                              <p className="font-bold text-zinc-200 bg-zinc-950/70 p-2.5 rounded-xl border border-zinc-800 text-[11px] leading-relaxed">
+                                {selectedArticlePost.answer}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Action Buttons */}
+                          <div className="space-y-2 pt-2">
+                            <button
+                              type="button"
+                              onClick={() => handleGenerateArticle(selectedArticlePost)}
+                              disabled={isGeneratingArticle}
+                              className="w-full py-3 bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+                            >
+                              {isGeneratingArticle ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+                              <span>{isGeneratingArticle ? 'Writing Article...' : (articleHtmlDraft ? 'Regenerate with AI' : 'Generate Full Article')}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handlePublishArticleToWp(selectedArticlePost, 'publish')}
+                              disabled={isPublishingWp || !articleHtmlDraft.trim()}
+                              className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
+                            >
+                              {isPublishingWp ? <Loader2 size={15} className="animate-spin" /> : <Globe size={15} />}
+                              <span>{isPublishingWp ? 'Uploading to WP...' : (selectedArticlePost.wpPostUrl ? 'Update on WordPress' : 'Publish to WordPress')}</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => handlePublishArticleToWp(selectedArticlePost, 'draft')}
+                              disabled={isPublishingWp || !articleHtmlDraft.trim()}
+                              className="w-full py-2.5 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-50 text-zinc-300 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95"
+                            >
+                              <FileText size={14} />
+                              <span>Save as WordPress Draft</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Column: Article Studio Editor / Preview */}
+                      <div className="lg:col-span-8 space-y-4">
+                        <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-5 sm:p-6 shadow-xl space-y-4">
+                          <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                            <h3 className="font-black text-sm text-white uppercase tracking-wider flex items-center gap-2">
+                              <BookOpen size={16} className="text-[#0477CF]" /> Article Content Studio
+                            </h3>
+                            <div className="flex items-center gap-1 bg-zinc-950 p-1 rounded-xl border border-zinc-800 text-xs font-bold">
+                              <button
+                                onClick={() => setArticleEditorTab('preview')}
+                                className={`px-3 py-1 rounded-lg transition-all ${articleEditorTab === 'preview' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
+                              >
+                                Visual Preview
+                              </button>
+                              <button
+                                onClick={() => setArticleEditorTab('html')}
+                                className={`px-3 py-1 rounded-lg transition-all ${articleEditorTab === 'html' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
+                              >
+                                Edit HTML
+                              </button>
+                            </div>
+                          </div>
+
+                          {articleEditorTab === 'preview' ? (
+                            articleHtmlDraft ? (
+                              <div className="prose prose-invert max-w-none text-zinc-200 text-sm leading-relaxed p-4 sm:p-6 bg-zinc-950/80 rounded-2xl border border-zinc-800/80 max-h-[600px] overflow-y-auto">
+                                <div dangerouslySetInnerHTML={{ __html: articleHtmlDraft }} />
+                              </div>
+                            ) : (
+                              <div className="text-center py-16 px-4 bg-zinc-950/50 rounded-2xl border border-dashed border-zinc-800 space-y-3">
+                                <BookOpen size={32} className="mx-auto text-zinc-600" />
+                                <p className="text-sm font-bold text-zinc-300">No Article Written Yet</p>
+                                <p className="text-xs text-zinc-500 max-w-md mx-auto">
+                                  Click "Generate Full Article" on the left to have Gemini write a complete, structured article formatted for your WordPress site.
+                                </p>
+                                <button
+                                  onClick={() => handleGenerateArticle(selectedArticlePost)}
+                                  disabled={isGeneratingArticle}
+                                  className="mt-2 px-4 py-2 bg-[#0477CF] hover:bg-blue-600 text-white font-bold text-xs rounded-xl inline-flex items-center gap-2 shadow"
+                                >
+                                  {isGeneratingArticle ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                  <span>Generate Article Now</span>
+                                </button>
+                              </div>
+                            )
+                          ) : (
+                            <div className="space-y-2">
+                              <textarea
+                                value={articleHtmlDraft}
+                                onChange={(e) => setArticleHtmlDraft(e.target.value)}
+                                placeholder="Paste or edit HTML content here..."
+                                className="w-full h-[500px] bg-zinc-950 font-mono text-xs text-zinc-200 p-4 rounded-2xl border border-zinc-800 focus:outline-none focus:border-[#0477CF] resize-y"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    <div className="p-4 rounded-2xl bg-gradient-to-r from-blue-900/30 via-zinc-900 to-zinc-900 border border-blue-500/20 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+                      <div>
+                        <h3 className="font-black text-sm text-white flex items-center gap-2">
+                          <Globe size={16} className="text-[#0477CF]" /> WordPress Articles Hub
+                        </h3>
+                        <p className="text-xs text-zinc-400 mt-0.5">Select any quiz or riddle from your feed to generate a full article and publish it to quizandriddles.com with its featured image card.</p>
+                      </div>
+                      <button
+                        onClick={() => setIsSettingsOpen(true)}
+                        className="px-3.5 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-xs font-bold rounded-xl shrink-0 transition-colors"
+                      >
+                        WordPress Settings
+                      </button>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                      {filteredPosts.map((post) => (
+                        <div
+                          key={post.id}
+                          className="bg-zinc-900 border border-zinc-800 rounded-3xl p-4 sm:p-5 flex flex-col justify-between hover:border-zinc-700 transition-all shadow-lg group"
+                        >
+                          <div>
+                            <div className="flex items-center justify-between mb-3">
+                              <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md">
+                                {post.category}
+                              </span>
+                              {post.wpPostUrl ? (
+                                <a
+                                  href={post.wpPostUrl}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/30 px-2 py-0.5 rounded-md flex items-center gap-1 hover:bg-emerald-500/20"
+                                >
+                                  <CheckCircle2 size={10} /> Live on WP <ExternalLink size={9} />
+                                </a>
+                              ) : post.articleContent ? (
+                                <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-md">
+                                  Draft Ready
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-zinc-500 bg-zinc-800/80 px-2 py-0.5 rounded-md">
+                                  No Article
+                                </span>
+                              )}
+                            </div>
+
+                            <p className="font-bold text-white text-xs sm:text-sm line-clamp-2 mb-3 leading-snug">
+                              {post.visual_text}
+                            </p>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => handleOpenArticleEditor(post)}
+                            className="w-full mt-2 py-2.5 bg-zinc-800 hover:bg-[#0477CF] text-zinc-200 hover:text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all shadow active:scale-95"
+                          >
+                            <BookOpen size={13} />
+                            <span>{post.wpPostUrl ? 'View / Edit Article' : (post.articleContent ? 'Review Draft' : 'Write Full Article')}</span>
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : viewMode === ViewMode.Generate ? (
               <div className="max-w-2xl mx-auto space-y-8 py-6 sm:py-10">
                 <div className="text-center space-y-2 sm:space-y-3">
                    <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-[#0477CF]/10 rounded-3xl flex items-center justify-center text-[#0477CF] mb-3"><PlusCircle size={28} /></div>
@@ -862,6 +1184,21 @@ const App: React.FC = () => {
                                   {post.source === 'ai' && (
                                     <span className="text-[9px] font-bold text-indigo-700 bg-indigo-50 border border-indigo-200 px-2 py-0.5 rounded-md flex items-center gap-1">
                                       <Sparkles size={10} /> Viral AI
+                                    </span>
+                                  )}
+                                  {post.wpStatus === 'publish' && (
+                                    <span className="text-[9px] font-bold text-sky-700 bg-sky-50 border border-sky-200 px-2 py-0.5 rounded-md flex items-center gap-1" title="Live on quizandriddles.com">
+                                      <Globe size={10} /> WP Live
+                                    </span>
+                                  )}
+                                  {post.wpStatus === 'future' && (
+                                    <span className="text-[9px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md flex items-center gap-1" title="Scheduled on WordPress">
+                                      <Clock size={10} /> WP Scheduled
+                                    </span>
+                                  )}
+                                  {post.wpStatus === 'draft' && (
+                                    <span className="text-[9px] font-bold text-zinc-600 bg-zinc-100 border border-zinc-200 px-2 py-0.5 rounded-md flex items-center gap-1" title="Saved as WordPress Draft">
+                                      <BookOpen size={10} /> WP Draft
                                     </span>
                                   )}
                                 </div>
@@ -966,13 +1303,38 @@ const App: React.FC = () => {
                               <span className="text-[10px] font-black tracking-wider text-[#0477CF] uppercase flex items-center gap-1.5">
                                 <ImageIcon size={13} /> {post.renderedImageUrl ? "View / Edit Card" : "Design & Export"}
                               </span>
-                              <Share2 size={14} className="text-[#0477CF] opacity-40 group-hover:opacity-100 transition-opacity" />
+                              <div className="flex items-center gap-2">
+                                {post.wpPostUrl && (
+                                  <a
+                                    href={post.wpPostUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={(e) => e.stopPropagation()}
+                                    className="text-sky-600 hover:text-sky-800 transition-colors p-1"
+                                    title="View on quizandriddles.com"
+                                  >
+                                    <Globe size={14} />
+                                  </a>
+                                )}
+                                <Share2 size={14} className="text-[#0477CF] opacity-40 group-hover:opacity-100 transition-opacity" />
+                              </div>
                             </div>
                           </div>
                         </ThemeWrapper>
 
-                        {/* Action buttons (archive / delete) - Visible by default on mobile touchscreens */}
+                        {/* Action buttons (write article / archive / delete) - Visible by default on mobile touchscreens */}
                         <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity z-20">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenArticleEditor(post);
+                            }}
+                            className="p-2 rounded-xl shadow-md bg-zinc-800/90 hover:bg-[#0477CF] text-zinc-300 hover:text-white transition-all active:scale-95 border border-zinc-700/60"
+                            title="Open Article Editor Studio"
+                          >
+                            <BookOpen size={14} />
+                          </button>
                           <button 
                             type="button"
                             onClick={(e) => { e.stopPropagation(); toggleArchive(post); }} 
@@ -1055,6 +1417,7 @@ const App: React.FC = () => {
           setSelectedPost(updated);
           setAllPosts(prev => prev.map(p => p.id === updated.id ? updated : p));
         }}
+        onWriteArticle={handleOpenArticleEditor}
       />
       <SettingsModal 
         isOpen={isSettingsOpen} 

@@ -145,28 +145,100 @@ export async function generateCustomEnigma(userRequest: string): Promise<QuizPos
 
   return withRetry(async () => {
     const ai = new GoogleGenAI({ apiKey });
+    const prompt = `Create a custom, high-engagement viral quiz or riddle post based on this request: "${userRequest}". 
+Ensure the visual_text is clean and punchy, caption_hook is a viral 1-sentence teaser, answer reveals the twist, read_more_content explains the logic, and category is one of: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Controversial, Fun Facts, Blogs.`;
+
     const response = await generateWithModelFallback(
       ai,
-      `Generate exactly 1 high-quality quiz/riddle post based on this request: "${userRequest}". Make it unique, specific, and clear.`,
+      prompt,
       SYSTEM_INSTRUCTIONS,
       POST_SCHEMA
     );
 
-    return assignId(JSON.parse(response.text || "{}"));
+    const parsed = JSON.parse(response.text || "{}");
+    return assignId(parsed, 0);
   });
 }
 
-export async function generatePostImage(post: QuizPost): Promise<string> {
+/**
+ * Crafts a long-form, SEO-optimized HTML article for WordPress (quizandriddles.com)
+ * matching the site's exact article format:
+ * - <h2>Riddle:</h2> (or Question / Puzzle)
+ * - <h2>Answer:</h2>
+ * - <h2>Explanation:</h2> with hook, step-by-step breakdown list, and engaging conclusion.
+ */
+export async function generateArticleForPost(post: QuizPost): Promise<string> {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
-    throw new Error("Missing API Key for AI image generation.");
+    throw new Error("Missing Gemini API Key. Click 'Settings' in the sidebar to add your key.");
+  }
+
+  const sectionLabel = post.category === 'Riddles' ? 'Riddle' :
+                       post.category === 'Puzzles' ? 'Puzzle' :
+                       post.category === 'Brain Teasers' ? 'Brain Teaser' :
+                       post.category === 'Find the Mistake' ? 'Challenge' : 'Question';
+
+  const systemPrompt = `You are the chief content creator for "Daily Quiz and Riddles" (quizandriddles.com).
+Your task is to write a captivating, engaging, SEO-rich blog article for a given riddle or puzzle.
+
+### ARTICLE STYLE REQUIREMENTS (MANDATORY FORMAT):
+You must output clean semantic HTML (no markdown code blocks, just raw HTML) adhering strictly to this structure:
+
+<h2>${sectionLabel}:</h2>
+<p>[The exact riddle or question clearly formatted]</p>
+
+<h2>Answer:</h2>
+<p><strong>[The exact answer in bold]</strong></p>
+
+<h2>Explanation:</h2>
+<p>[Engaging intro naming the concept or riddle type (e.g. "This riddle is called Look and Say Sequence"), welcoming readers, and hooking their curiosity]</p>
+
+<p>To crack this sequence, we need to carefully observe the pattern that governs its progression...</p>
+
+<p>Let's break it down step by step:</p>
+<ul>
+  <li><strong>[Step/Term 1]:</strong> [Clear explanation]</li>
+  <li><strong>[Step/Term 2]:</strong> [Clear explanation]</li>
+  <li><strong>[Step/Term 3]:</strong> [Clear explanation]</li>
+  [Add enough bullet points to completely and thoroughly walk through the solution]
+</ul>
+
+<p>Now, what comes next in this intriguing sequence? Applying the pattern, we find: <strong>[Answer]</strong></p>
+
+<p>[Engaging concluding takeaway celebrating the reader's observation and encouraging them to share with friends and family.]</p>
+
+Ensure the explanation is 100% mathematically, logically, or factually accurate.`;
+
+  return withRetry(async () => {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Write an article for this ${post.category}:
+Question / Riddle: "${post.visual_text}"
+Answer: "${post.answer}"
+Context / Hook: "${post.read_more_content || ''}"`,
+      config: {
+        systemInstruction: systemPrompt,
+      },
+    });
+
+    let html = response.text || '';
+    html = html.replace(/^```html\s*/i, '').replace(/```\s*$/i, '').trim();
+    return html;
+  });
+}
+
+export async function generateEnigmaImage(prompt: string): Promise<string> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("Missing Gemini API Key. Click 'Settings' in the sidebar to add your key.");
   }
 
   try {
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image',
-      contents: `Vector line illustration of "${post.image_keyword}". Isolated on a pure white background, minimal clipart style, no text.`,
+      model: 'imagen-3.0-generate-002',
+      contents: `Vector style minimalist graphic illustration of: ${prompt}. Flat design, clean lines, high contrast icon aesthetic, vibrant modern colors on solid plain background, zero noise, zero text, zero watermark, centered composition.`,
       config: {
         // @ts-ignore
         responseModalities: ['IMAGE'],
@@ -193,10 +265,10 @@ export const Prompts = {
       ? `\n\nALREADY GENERATED — do NOT repeat or rephrase these:\n${recentTitles.map(t => `- ${t}`).join('\n')}`
       : '';
     const seed = Math.floor(Math.random() * 1000000);
-    return `Generate 8 viral, fast-scrolling TikTok & Reels style quiz and riddle posts.
+    return `Generate 8 viral, fast-scrolling TikTok & blog-ready quiz and riddle posts.
 ZERO school homework or exam questions (NEVER Ohm's law, NEVER physics formulas, NEVER gold foil experiments, NEVER dry textbook history).
-Focus on: brain-glitch trick questions (e.g. "If you pass the person in 2nd place..."), viral math disputes (e.g. "5 + 5 × 5 - 5 = ?"), mind-blowing "did you know" wonders (pink hippo milk, Mars blue sunsets, Sudan having more pyramids than Egypt), and clever wordplay riddles.
-Mix categories: at least one Logic & Math, one true Riddle, one fun General Knowledge, one Science & Tech wonder, and one polarizing Would You Rather dilemma. [Seed: ${seed}]${avoidClause}`;
+Focus on: brain-glitch trick questions (e.g. "If you pass the person in 2nd place..."), viral math disputes (e.g. "5 + 5 × 5 - 5 = ?"), number sequence puzzles (e.g. Look and Say), mind-blowing "did you know" wonders (pink hippo milk, Mars blue sunsets), and clever wordplay riddles.
+Mix categories across: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Controversial, and Fun Facts. [Seed: ${seed}]${avoidClause}`;
   },
 
   getCategory: (category: Category, recentTitles: string[] = []) => {
@@ -208,22 +280,26 @@ Mix categories: at least one Logic & Math, one true Riddle, one fun General Know
     let categoryGuidance = 'Ensure questions are addictive, fast-paced, and spark massive comment debates.';
     if (category === Category.Riddles) {
       categoryGuidance = 'MANDATORY: Every post MUST be an authentic riddle or brain-glitch trick question (e.g. "If you overtake 2nd place...", "What do cows drink?"). Absolutely NO physics, chemistry, or textbook definitions!';
-    } else if (category === Category.GeneralKnowledge) {
-      categoryGuidance = 'MANDATORY: Mind-blowing viral trivia that makes people say "NO WAY!" (e.g. ketchup sold as medicine, Sudan having more pyramids than Egypt, chocolate records). ZERO high school history exams or dry dates!';
-    } else if (category === Category.LogicMath) {
-      categoryGuidance = 'MANDATORY: Viral order-of-operation traps (e.g. 5 + 5 × 5 - 5), 3 pills every 30 mins, clock math, bat & ball cost, rapid counting traps. Absolutely NO calculus, formulas, or academic math proofs!';
-    } else if (category === Category.ScienceTech) {
-      categoryGuidance = 'MANDATORY: Mind-blowing physical wonders (why Mars sunsets are blue, pink hippo milk, why fingers wrinkle in water, koala fingerprints). ZERO Ohm\'s law, ZERO formulas, ZERO high school physics exams!';
-    } else if (category === Category.NatureAnimals) {
-      categoryGuidance = 'MANDATORY: Bizarre, unbelievable animal habits (wombats cubic poop, hummingbirds flying backwards, sea otter fur density).';
-    } else if (category === Category.LanguageLit) {
-      categoryGuidance = 'MANDATORY: Fast reflex word challenges (name 3 fruits without the letter E in 5 seconds, 15-letter isograms, bookkeeper double letters).';
-    } else if (category === Category.WouldYouRather) {
-      categoryGuidance = 'MANDATORY: Highly polarizing, hilarious, or agonizing lifestyle dilemmas that start heated comment wars.';
+    } else if (category === Category.Puzzles) {
+      categoryGuidance = 'MANDATORY: Number sequences, order-of-operation disputes (e.g. 5 + 5 × 5 - 5), math logic, clock math, bat & ball cost, rapid counting traps. Absolutely NO calculus or academic textbook proofs!';
+    } else if (category === Category.BrainTeasers) {
+      categoryGuidance = 'MANDATORY: Lateral thinking, fast reflex traps, logic twist questions where the intuitive answer is wrong.';
+    } else if (category === Category.Quiz) {
+      categoryGuidance = 'MANDATORY: Mind-blowing viral trivia that makes people say "NO WAY!" (e.g. ketchup sold as medicine, Sudan having more pyramids than Egypt). ZERO dry dates or textbook exams!';
+    } else if (category === Category.FindTheMistake) {
+      categoryGuidance = 'MANDATORY: Subtle error spotting in sentences, math equations, or situations (e.g. repeated words like "in the the", arithmetic misdirection).';
+    } else if (category === Category.Misconceptions) {
+      categoryGuidance = 'MANDATORY: Psychology and everyday human myths debunked (e.g. goldfish memory, 10% brain myth, bulls hating red).';
+    } else if (category === Category.Controversial) {
+      categoryGuidance = 'MANDATORY: Would You Rather lifestyle dilemmas or polarizing debate questions that start heated comment wars.';
+    } else if (category === Category.FunFacts) {
+      categoryGuidance = 'MANDATORY: Bizarre, unbelievable animal and world facts (wombats cubic poop, hummingbirds flying backwards, sea otter fur density).';
+    } else if (category === Category.Blogs) {
+      categoryGuidance = 'MANDATORY: Deep-dive sequence breakdown or captivating historical riddle story.';
     }
 
-    return `Generate 8 viral TikTok-ready posts for the "${category}" category.
+    return `Generate 8 viral posts for the "${category}" category.
 ${categoryGuidance}
-Every post must be engineered for high social media engagement, stopping scrollers in under 3 seconds. [Seed: ${seed}]${avoidClause}`;
+Every post must be engineered for high audience engagement and sharing. [Seed: ${seed}]${avoidClause}`;
   },
 };

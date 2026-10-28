@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   X, CheckCircle2, Info, Share2, Download, 
   Image as ImageIcon, Loader2, Upload, 
-  Search, Edit3, ChevronRight, Clock, Send, Check
+  Search, Edit3, ChevronRight, Clock, Send, Check, BookOpen, Globe, ExternalLink
 } from 'lucide-react';
 import { QuizPost } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
@@ -18,6 +18,7 @@ interface PostModalProps {
   allPosts?: QuizPost[];
   onClose: () => void;
   onPostUpdated?: (updated: QuizPost) => void;
+  onWriteArticle?: (post: QuizPost) => void;
 }
 
 
@@ -222,7 +223,7 @@ const Canvas1000: React.FC<Canvas1000Props> = ({
 
 // ── Main PostModal Component ───────────────────────────────────────────────────
 
-const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUpdated }) => {
+const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUpdated, onWriteArticle }) => {
   const [selectedLayout, setSelectedLayout] = useState<LayoutType>('auto');
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [vectorCandidates, setVectorCandidates] = useState<string[]>([]);
@@ -863,6 +864,38 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                   >
                     𝕏 Tweet
                   </button>
+                  {onWriteArticle && (
+                    <button
+                      onClick={() => onWriteArticle(post)}
+                      type="button"
+                      className="py-2.5 sm:py-3 px-3.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 hover:border-zinc-500 text-zinc-200 hover:text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 shrink-0"
+                      title="Write full SEO article for WordPress website"
+                    >
+                      <BookOpen size={14} className="text-[#0477CF]" />
+                      <span>
+                        {post.wpStatus === 'publish'
+                          ? 'WP Article (Live)'
+                          : post.wpStatus === 'future'
+                          ? 'WP Article (Scheduled)'
+                          : post.articleContent
+                          ? 'WP Article (Draft)'
+                          : 'WP Article'}
+                      </span>
+                    </button>
+                  )}
+                  {post.wpPostUrl && (
+                    <a
+                      href={post.wpPostUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2.5 sm:py-3 px-3.5 bg-sky-950/60 hover:bg-sky-900/80 border border-sky-600/40 text-sky-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition-all shadow-md active:scale-95 shrink-0"
+                      title="Open published article on quizandriddles.com"
+                    >
+                      <Globe size={14} className="text-sky-400" />
+                      <span>View on Web</span>
+                      <ExternalLink size={11} className="opacity-70" />
+                    </a>
+                  )}
                 </div>
                 {postNowStatus && (
                   <div className="text-[11px] p-2.5 bg-zinc-900 border border-zinc-800 rounded-xl text-zinc-300">

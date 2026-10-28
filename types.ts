@@ -1,14 +1,33 @@
 
 export enum Category {
-  LogicMath = 'Logic & Math',
-  ScienceTech = 'Science & Tech',
-  GeneralKnowledge = 'General Knowledge',
-  LanguageLit = 'Language & Literature',
   Riddles = 'Riddles',
-  NatureAnimals = 'Nature & Animals',
-  Psychology = 'Psychology',
-  WouldYouRather = 'Would you rather',
+  Puzzles = 'Puzzles',
+  BrainTeasers = 'Brain Teasers',
+  Quiz = 'Quiz',
+  FindTheMistake = 'Find the Mistake',
+  Misconceptions = 'Misconceptions',
+  Controversial = 'Controversial',
+  FunFacts = 'Fun Facts',
+  Blogs = 'Blogs',
   All = 'All'
+}
+
+/**
+ * Normalizes any category string (including legacy ones like Logic & Math, Would you rather)
+ * to our active WordPress-aligned Category enum.
+ */
+export function normalizeCategory(cat: string): Category {
+  const c = (cat || '').trim().toLowerCase();
+  if (c === 'riddles') return Category.Riddles;
+  if (c === 'puzzles' || c === 'logic & math' || c === 'math' || c === 'logic') return Category.Puzzles;
+  if (c === 'brain teasers' || c === 'brain teaser') return Category.BrainTeasers;
+  if (c === 'find the mistake' || c === 'find mistake') return Category.FindTheMistake;
+  if (c === 'misconceptions' || c === 'misconception' || c === 'psychology') return Category.Misconceptions;
+  if (c === 'controversial' || c === 'would you rather' || c === 'wyr') return Category.Controversial;
+  if (c === 'fun facts' || c === 'nature & animals' || c === 'animals' || c === 'nature') return Category.FunFacts;
+  if (c === 'blogs' || c === 'blog') return Category.Blogs;
+  if (c === 'quiz' || c === 'science & tech' || c === 'general knowledge' || c === 'language & literature') return Category.Quiz;
+  return Category.Quiz;
 }
 
 export interface QuizPost {
@@ -44,6 +63,21 @@ export interface QuizPost {
   bufferPostIds?: string[];
   postError?: string;
   source?: 'ai' | 'human_web' | 'community';
+
+  /** WordPress Website Article Integration */
+  articleContent?: string;
+  wpPostId?: number;
+  wpPostUrl?: string;
+  wpStatus?: 'draft' | 'publish' | 'future';
+  wpPublishedAt?: number;
+}
+
+export interface WordPressConfig {
+  siteUrl: string;
+  username: string;
+  applicationPassword: string;
+  enabled: boolean;
+  autoPublishWithQueue?: boolean;
 }
 
 export interface SocialConfig {
@@ -71,6 +105,7 @@ export interface SocialConfig {
     channelId: string;
     enabled: boolean;
   };
+  wordpress?: WordPressConfig;
   scheduleTimes: string[]; // e.g. ["09:00", "13:00", "18:00"]
   timezone: string; // e.g. "America/Chicago"
   autopostEnabled: boolean;
@@ -82,5 +117,6 @@ export enum ViewMode {
   Browse = 'BROWSE',
   Generate = 'GENERATE',
   Archive = 'ARCHIVE',
-  Queue = 'QUEUE'
+  Queue = 'QUEUE',
+  Articles = 'ARTICLES'
 }

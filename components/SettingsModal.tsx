@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Check, AlertCircle, Loader2, Sparkles, 
-  Image as ImageIcon, Share2, Clock, Trash2
+  Image as ImageIcon, Share2, Clock, Trash2, Globe
 } from 'lucide-react';
 import { testAllSocialIntegrations, SocialTestResult } from '../services/socialDirectService';
 import { getGeminiApiKey, setGeminiApiKey } from '../services/geminiService';
 import { getPixabayKey, setPixabayKey } from '../services/imageService';
 import { GoogleGenAI } from '@google/genai';
-import { SocialConfig } from '../types';
+import { SocialConfig, WordPressConfig } from '../types';
 import { getSocialConfig, saveSocialConfig, getLocalSocialConfig } from '../services/socialService';
+import { 
+  getLocalWordPressConfig, 
+  saveLocalWordPressConfig, 
+  testWordPressConnection 
+} from '../services/wordpressService';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -18,7 +23,7 @@ interface SettingsModalProps {
 }
 
 const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved, userId }) => {
-  const [activeTab, setActiveTab] = useState<'ai' | 'social'>('social');
+  const [activeTab, setActiveTab] = useState<'ai' | 'social' | 'wordpress'>('wordpress');
   
   // AI Keys
   const [geminiKey, setGeminiKey] = useState(getGeminiApiKey());
@@ -32,6 +37,25 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   const [isTestingSocials, setIsTestingSocials] = useState(false);
   const [socialTestResults, setSocialTestResults] = useState<SocialTestResult[] | null>(null);
   const [newTimeInput, setNewTimeInput] = useState('');
+
+  // WordPress Config
+  const [wpConfig, setWpConfig] = useState<WordPressConfig>(() => getLocalWordPressConfig());
+  const [isTestingWp, setIsTestingWp] = useState(false);
+  const [wpTestResult, setWpTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
+
+  const handleTestWordPress = async () => {
+    setIsTestingWp(true);
+    setWpTestResult(null);
+    try {
+      saveLocalWordPressConfig(wpConfig);
+      const res = await testWordPressConnection(wpConfig);
+      setWpTestResult({ ok: res.success, msg: res.message });
+    } catch (err: any) {
+      setWpTestResult({ ok: false, msg: err?.message || String(err) });
+    } finally {
+      setIsTestingWp(false);
+    }
+  };
 
   const handleTestAllSocials = async () => {
     setIsTestingSocials(true);
@@ -53,6 +77,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
     if (isOpen) {
       const local = getLocalSocialConfig();
       setSocialConfig(local);
+      setWpConfig(getLocalWordPressConfig());
       if (userId) {
         getSocialConfig(userId).then((cfg) => setSocialConfig(cfg));
       }
@@ -64,6 +89,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
   const handleSave = async () => {
     setGeminiApiKey(geminiKey);
     setPixabayKey(pixabayKey);
+    saveLocalWordPressConfig(wpConfig);
     await saveSocialConfig(userId, socialConfig);
 
     setSaveMsg(true);
@@ -146,6 +172,16 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
         {/* Tab Selector */}
         <div className="flex gap-1.5 sm:gap-2 pt-3 pb-2 shrink-0 overflow-x-auto">
           <button
+            onClick={() => setActiveTab('wordpress')}
+            className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
+              activeTab === 'wordpress' 
+                ? 'bg-[#0477CF] text-white shadow-md' 
+                : 'bg-zinc-800/60 text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Globe size={14} /> WordPress Blog
+          </button>
+          <button
             onClick={() => setActiveTab('social')}
             className={`flex-1 py-2 px-2.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 whitespace-nowrap ${
               activeTab === 'social' 
@@ -169,6 +205,101 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose, onSaved,
 
         {/* Scrollable Content Body */}
         <div className="overflow-y-auto pr-1 py-3 flex-1 space-y-4">
+          {activeTab === 'wordpress' && (
+            <div className="space-y-4">
+              <div className="border border-zinc-800 bg-zinc-950/80 p-4 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe size={18} className="text-[#0477CF]" />
+                    <div>
+                      <h3 className="text-sm font-bold text-white">WordPress Integration</h3>
+                      <p className="text-[11px] text-zinc-400">Auto-publish companion articles directly to quizandriddles.com</p>
+                    </div>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={wpConfig.enabled}
+                      onChange={(e) => setWpConfig({ ...wpConfig, enabled: e.target.checked })}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-zinc-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-zinc-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0477CF]"></div>
+                  </label>
+                </div>
+
+                <div className="space-y-3 pt-2 border-t border-zinc-800/80 text-xs">
+                  <div>
+                    <label className="block text-zinc-300 font-bold mb-1">WordPress Site URL</label>
+                    <input
+                      type="url"
+                      value={wpConfig.siteUrl}
+                      onChange={(e) => setWpConfig({ ...wpConfig, siteUrl: e.target.value })}
+                      placeholder="https://quizandriddles.com"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#0477CF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-300 font-bold mb-1">WordPress Username</label>
+                    <input
+                      type="text"
+                      value={wpConfig.username}
+                      onChange={(e) => setWpConfig({ ...wpConfig, username: e.target.value })}
+                      placeholder="aeskay"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#0477CF]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-zinc-300 font-bold mb-1">Application Password</label>
+                    <input
+                      type="password"
+                      value={wpConfig.applicationPassword}
+                      onChange={(e) => setWpConfig({ ...wpConfig, applicationPassword: e.target.value })}
+                      placeholder="xxxx xxxx xxxx xxxx"
+                      className="w-full bg-zinc-900 border border-zinc-800 rounded-xl px-3 py-2 text-white focus:outline-none focus:border-[#0477CF]"
+                    />
+                    <p className="text-[10px] text-zinc-500 mt-1">Generated in WP Admin &rarr; Users &rarr; Profile &rarr; Application Passwords.</p>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3 bg-zinc-900/60 rounded-xl border border-zinc-800/80">
+                    <div>
+                      <span className="font-bold text-zinc-200 block">Auto-Publish with Social Queue</span>
+                      <span className="text-[11px] text-zinc-400">Automatically schedule companion articles when queuing social posts</span>
+                    </div>
+                    <input
+                      type="checkbox"
+                      checked={!!wpConfig.autoPublishWithQueue}
+                      onChange={(e) => setWpConfig({ ...wpConfig, autoPublishWithQueue: e.target.checked })}
+                      className="w-4 h-4 rounded text-[#0477CF] focus:ring-0 focus:ring-offset-0 bg-zinc-800 border-zinc-700"
+                    />
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={handleTestWordPress}
+                      disabled={isTestingWp}
+                      className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-white rounded-xl font-bold flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                      {isTestingWp ? <Loader2 size={13} className="animate-spin text-blue-400" /> : <Globe size={13} />}
+                      <span>{isTestingWp ? 'Verifying...' : 'Test Connection'}</span>
+                    </button>
+                  </div>
+
+                  {wpTestResult && (
+                    <div className={`p-3 rounded-xl text-xs flex items-start gap-2 ${
+                      wpTestResult.ok ? 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'
+                    }`}>
+                      {wpTestResult.ok ? <Check size={14} className="mt-0.5 shrink-0" /> : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+                      <span>{wpTestResult.msg}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {activeTab === 'social' && (
             <div className="space-y-4">
               

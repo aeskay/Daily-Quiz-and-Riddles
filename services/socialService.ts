@@ -11,6 +11,12 @@ import {
   getBufferPostStatus
 } from "./bufferService";
 import { buildSocialCaption } from "./socialDirectService";
+import { 
+  getLocalWordPressConfig, 
+  publishToWordPress, 
+  updateWordPressPostStatus 
+} from "./wordpressService";
+import { generateArticleForPost } from "./geminiService";
 
 const functions = getFunctions(app);
 
@@ -328,7 +334,7 @@ export async function queuePostForAutopost(
     dueAtIso
   );
 
-  const updated: QuizPost = {
+  let updated: QuizPost = {
     ...post,
     scheduleStatus: 'queued',
     scheduledTime: dueAtIso,
@@ -337,6 +343,36 @@ export async function queuePostForAutopost(
     bufferPostIds: res.ids,
     postError: res.errors.length > 0 ? res.errors.join(' | ') : undefined,
   };
+
+  // If WordPress auto-publish with queue is enabled, automatically generate & schedule article on WordPress
+  const wpConfig = getLocalWordPressConfig();
+  if (wpConfig.enabled && wpConfig.autoPublishWithQueue && (!post.wpStatus || post.wpStatus === 'draft' || post.wpStatus === 'future')) {
+    try {
+      let articleHtml = post.articleContent;
+      if (!articleHtml || !articleHtml.trim()) {
+        articleHtml = await generateArticleForPost(post);
+        updated.articleContent = articleHtml;
+      }
+
+      const wpRes = await publishToWordPress(wpConfig, {
+        post: updated,
+        htmlContent: articleHtml,
+        status: 'future',
+        scheduledIso: dueAtIso,
+      });
+
+      updated = {
+        ...updated,
+        articleContent: articleHtml,
+        wpPostId: wpRes.id,
+        wpPostUrl: wpRes.link,
+        wpStatus: wpRes.status as any,
+        wpPublishedAt: Date.now(),
+      };
+    } catch (wpErr: any) {
+      console.warn("WordPress auto-schedule during queue failed (continuing with social queue):", wpErr);
+    }
+  }
 
   await updateUserPost(userId, updated);
   return { post: updated, platforms: res.platforms, errors: res.errors };
@@ -359,11 +395,22 @@ export async function unqueuePost(userId: string, post: QuizPost): Promise<QuizP
     });
   }
 
+  // If post was scheduled on WordPress as 'future', demote it back to 'draft'
+  if (post.wpPostId && post.wpStatus === 'future') {
+    const wpConfig = getLocalWordPressConfig();
+    if (wpConfig.enabled) {
+      updateWordPressPostStatus(wpConfig, post.wpPostId, 'draft').catch(err => {
+        console.warn("Error resetting WordPress post to draft on unqueue:", err);
+      });
+    }
+  }
+
   const updated: QuizPost = {
     ...post,
     scheduleStatus: 'draft',
     scheduledTime: '',
     bufferPostIds: [],
+    wpStatus: post.wpStatus === 'future' ? 'draft' : post.wpStatus,
   };
 
   await updateUserPost(userId, updated);
@@ -452,6 +499,21 @@ export async function reschedulePost(
         rescheduleBufferPost(bufferToken, bid, newDueAtIso, caption, imageUrl)
       )
     );
+  }
+
+  // If scheduled on WordPress, also update scheduled time on WordPress
+  if (post.wpPostId && post.wpStatus === 'future') {
+    const wpConfig = getLocalWordPressConfig();
+    if (wpConfig.enabled) {
+      publishToWordPress(wpConfig, {
+        post,
+        htmlContent: post.articleContent || '',
+        status: 'future',
+        scheduledIso: newDueAtIso,
+      }).catch(err => {
+        console.warn("Error rescheduling WordPress post:", err);
+      });
+    }
   }
 
   const updated: QuizPost = {
