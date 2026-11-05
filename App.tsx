@@ -6,8 +6,8 @@ import {
   Settings as SettingsIcon, Image as ImageIcon, LogIn, LogOut, User as UserIcon,
   Clock, Globe, RefreshCw, BookOpen, ExternalLink, FileText, CheckCircle2, ChevronLeft
 } from 'lucide-react';
-import { QuizPost, Category, ViewMode, normalizeCategory } from './types';
-import { fetchQuizPosts, Prompts, generateCustomEnigma, generateArticleForPost } from './services/geminiService';
+import { QuizPost, Category, ViewMode, normalizeCategory, isWouldYouRather } from './types';
+import { fetchQuizPosts, Prompts, generateCustomEnigma, generateArticleForPost, analyzeAndSolveEnigmaImage, generateCaptionForImage } from './services/geminiService';
 import { fetchRealHumanContent } from './services/humanTriviaService';
 import { CATEGORIES_CONFIG } from './constants';
 import ThemeWrapper from './components/ThemeWrapper';
@@ -223,6 +223,17 @@ const App: React.FC = () => {
   const [customPrompt, setCustomPrompt] = useState('');
   const [isGeneratingCustom, setIsGeneratingCustom] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Custom Image Creator State
+  const [customTab, setCustomTab] = useState<'text' | 'image'>('text');
+  const [customImage, setCustomImage] = useState<string | null>(null);
+  const [customImageFile, setCustomImageFile] = useState<File | null>(null);
+  const [customImageCaption, setCustomImageCaption] = useState('');
+  const [customImageCategory, setCustomImageCategory] = useState<Category>(Category.Puzzles);
+  const [customImageNotes, setCustomImageNotes] = useState('');
+  const [isAnalyzingCustomImage, setIsAnalyzingCustomImage] = useState(false);
+  const [isSuggestingCaption, setIsSuggestingCaption] = useState(false);
+  const customImageInputRef = useRef<HTMLInputElement>(null);
 
   // Mobile/PWA Back Navigation & Double-Back Exit
   const [showExitToast, setShowExitToast] = useState(false);
@@ -682,6 +693,123 @@ const App: React.FC = () => {
       setError(err?.message || 'Generation failed. Check your API key in Settings.');
     } finally {
       setIsGeneratingCustom(false);
+    }
+  };
+
+  const handleCustomImageFileSelected = (file: File) => {
+    if (!file || !file.type.startsWith('image/')) {
+      setError("Please select a valid image file (PNG, JPG, WebP).");
+      return;
+    }
+    setCustomImageFile(file);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const dataUrl = e.target?.result as string;
+      setCustomImage(dataUrl);
+      setError(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCustomImageUploadChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleCustomImageFileSelected(file);
+    }
+  };
+
+  const handleCustomImageDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      handleCustomImageFileSelected(file);
+    }
+  };
+
+  const handleDesignAndSolveWithAI = async () => {
+    if (!customImage) return;
+    if (!currentUser) {
+      setError("Please sign in with Google to create custom posts.");
+      return;
+    }
+    setIsAnalyzingCustomImage(true);
+    setError(null);
+    try {
+      const mime = customImageFile?.type || 'image/jpeg';
+      const solvedPost = await analyzeAndSolveEnigmaImage(customImage, mime, customImageNotes.trim());
+      const postWithMeta: QuizPost = {
+        ...solvedPost,
+        imageUrl: customImage,
+        layout: 'image-only',
+        timestamp: Date.now(),
+        status: 'active',
+        userId: currentUser.uid,
+      };
+      await saveUserPosts(currentUser.uid, [postWithMeta]);
+      setSelectedPost(postWithMeta);
+      setCustomImage(null);
+      setCustomImageFile(null);
+      setCustomImageNotes('');
+      setCustomImageCaption('');
+      setViewMode(ViewMode.Today);
+      setSuccessMsg("AI analyzed and solved your riddle! Review or edit the answer & logic in the studio.");
+    } catch (err: any) {
+      setError(err?.message || 'AI Image analysis failed. Please check your Gemini API key in Settings.');
+    } finally {
+      setIsAnalyzingCustomImage(false);
+    }
+  };
+
+  const handleScheduleStraightUp = async () => {
+    if (!customImage) return;
+    if (!currentUser) {
+      setError("Please sign in with Google to create custom posts.");
+      return;
+    }
+    setError(null);
+    try {
+      const caption = customImageCaption.trim() || 'Can you solve this puzzle? Drop your answer below! 👇';
+      const newPost: QuizPost = {
+        id: `${Date.now()}-img-${Math.random().toString(36).substr(2, 9)}`,
+        caption_hook: caption,
+        visual_text: caption,
+        answer: '',
+        read_more_content: '',
+        category: customImageCategory || Category.Puzzles,
+        style_hint: 'Image Only',
+        image_keyword: 'puzzle',
+        text_length: 'short',
+        imageUrl: customImage,
+        layout: 'image-only',
+        isDirectImage: true,
+        timestamp: Date.now(),
+        status: 'active',
+        source: 'community',
+        userId: currentUser.uid,
+      };
+      await saveUserPosts(currentUser.uid, [newPost]);
+      setSelectedPost(newPost);
+      setCustomImage(null);
+      setCustomImageFile(null);
+      setCustomImageCaption('');
+      setCustomImageNotes('');
+      setViewMode(ViewMode.Today);
+      setSuccessMsg("Post created with branded 1000×1000 card! Click 'Queue Autopost' in the studio to schedule.");
+    } catch (err: any) {
+      setError(err?.message || 'Failed to create image post.');
+    }
+  };
+
+  const handleSuggestCaption = async () => {
+    if (!customImage) return;
+    setIsSuggestingCaption(true);
+    try {
+      const mime = customImageFile?.type || 'image/jpeg';
+      const hook = await generateCaptionForImage(customImage, mime);
+      setCustomImageCaption(hook);
+    } finally {
+      setIsSuggestingCaption(false);
     }
   };
 
@@ -1240,16 +1368,214 @@ const App: React.FC = () => {
                 )}
               </div>
             ) : viewMode === ViewMode.Generate ? (
-              <div className="max-w-2xl mx-auto space-y-8 py-6 sm:py-10">
+              <div className="max-w-2xl mx-auto space-y-6 sm:space-y-8 py-4 sm:py-8">
                 <div className="text-center space-y-2 sm:space-y-3">
-                   <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-[#0477CF]/10 rounded-3xl flex items-center justify-center text-[#0477CF] mb-3"><PlusCircle size={28} /></div>
+                   <div className="mx-auto w-14 h-14 sm:w-16 sm:h-16 bg-[#0477CF]/10 rounded-3xl flex items-center justify-center text-[#0477CF] mb-2 sm:mb-3">
+                     <PlusCircle size={28} />
+                   </div>
                    <h3 className="text-2xl sm:text-3xl font-black text-white font-heading">Custom Post Creator</h3>
-                   <p className="text-zinc-400 text-xs sm:text-sm">Specify a topic, riddle idea, or trivia question. It will be generated and saved to your cloud account.</p>
+                   <p className="text-zinc-400 text-xs sm:text-sm max-w-md mx-auto">
+                     Create viral riddles from a text prompt or upload custom puzzle images (math equations, traffic traps, situational riddles).
+                   </p>
                 </div>
-                <form onSubmit={handleCustomGenerate} className="space-y-4">
-                   <textarea value={customPrompt} onChange={(e) => setCustomPrompt(e.target.value)} placeholder="e.g. A viral order-of-operations math quiz, a clever riddle about a candle, or a fun chocolate trivia question..." className="w-full h-36 sm:h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-5 sm:p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-sm sm:text-base shadow-inner" />
-                   <button disabled={isGeneratingCustom || !customPrompt.trim()} className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-3.5 sm:py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-xs sm:text-sm shadow-lg">{isGeneratingCustom ? <Loader2 className="animate-spin" size={17} /> : <Send size={16} />} GENERATE & DESIGN</button>
-                </form>
+
+                {/* Tab Switcher: Text vs Image */}
+                <div className="flex items-center justify-center p-1 bg-zinc-900 border border-zinc-800 rounded-2xl max-w-sm mx-auto">
+                  <button
+                    type="button"
+                    onClick={() => setCustomTab('text')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all ${customTab === 'text' ? 'bg-[#0477CF] text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    <Sparkles size={15} /> Text Idea
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCustomTab('image')}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-xl text-xs sm:text-sm font-bold transition-all ${customTab === 'image' ? 'bg-[#0477CF] text-white shadow-md' : 'text-zinc-400 hover:text-white'}`}
+                  >
+                    <ImageIcon size={15} /> Upload Image
+                  </button>
+                </div>
+
+                {customTab === 'text' ? (
+                  <form onSubmit={handleCustomGenerate} className="space-y-4">
+                     <textarea
+                       value={customPrompt}
+                       onChange={(e) => setCustomPrompt(e.target.value)}
+                       placeholder="e.g. A viral order-of-operations math quiz, a clever riddle about a candle, or a fun chocolate trivia question..."
+                       className="w-full h-36 sm:h-40 bg-zinc-900 border border-zinc-800 rounded-3xl p-5 sm:p-6 text-white focus:ring-2 focus:ring-[#0477CF] outline-none resize-none text-sm sm:text-base shadow-inner"
+                     />
+                     <button
+                       disabled={isGeneratingCustom || !customPrompt.trim()}
+                       className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-3.5 sm:py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-95 uppercase tracking-widest text-xs sm:text-sm shadow-lg"
+                     >
+                       {isGeneratingCustom ? <Loader2 className="animate-spin" size={17} /> : <Send size={16} />} GENERATE & DESIGN
+                     </button>
+                  </form>
+                ) : (
+                  <div className="space-y-6">
+                    <input
+                      type="file"
+                      ref={customImageInputRef}
+                      onChange={handleCustomImageUploadChange}
+                      accept="image/*"
+                      className="hidden"
+                    />
+
+                    {!customImage ? (
+                      /* Drag & Drop Upload Zone */
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleCustomImageDrop}
+                        onClick={() => customImageInputRef.current?.click()}
+                        className="w-full border-2 border-dashed border-zinc-800 hover:border-[#0477CF] bg-zinc-900/60 hover:bg-zinc-900/90 rounded-3xl p-8 sm:p-12 flex flex-col items-center justify-center text-center cursor-pointer transition-all group"
+                      >
+                        <div className="w-16 h-16 rounded-2xl bg-[#0477CF]/10 group-hover:bg-[#0477CF]/20 text-[#0477CF] flex items-center justify-center mb-4 transition-colors">
+                          <Upload size={32} />
+                        </div>
+                        <h4 className="text-base sm:text-lg font-bold text-white mb-1">
+                          Upload Puzzle or Riddle Image
+                        </h4>
+                        <p className="text-zinc-400 text-xs sm:text-sm max-w-sm mb-4">
+                          Drag and drop your image here, or click to browse (PNG, JPG, WebP)
+                        </p>
+                        <span className="px-4 py-2 bg-zinc-800 group-hover:bg-[#0477CF] text-zinc-300 group-hover:text-white rounded-xl text-xs font-bold transition-all shadow">
+                          Choose Image File
+                        </span>
+                      </div>
+                    ) : (
+                      /* Uploaded Image Preview & Action Pathways */
+                      <div className="space-y-6">
+                        <div className="p-4 bg-zinc-900 border border-zinc-800 rounded-3xl space-y-3">
+                          <div className="flex items-center justify-between text-xs font-bold text-zinc-400">
+                            <span>Image Selected:</span>
+                            <button
+                              type="button"
+                              onClick={() => { setCustomImage(null); setCustomImageFile(null); }}
+                              className="text-red-400 hover:text-red-300 transition-colors"
+                            >
+                              Remove / Replace
+                            </button>
+                          </div>
+                          <div className="w-full max-h-64 sm:max-h-80 bg-zinc-950 rounded-2xl overflow-hidden flex items-center justify-center p-3 border border-zinc-850">
+                            <img
+                              src={customImage}
+                              alt="Uploaded riddle preview"
+                              className="max-h-60 sm:max-h-72 max-w-full object-contain rounded-xl"
+                            />
+                          </div>
+                        </div>
+
+                        {/* Dual Action Options */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {/* Option 1: Design & Solve with AI */}
+                          <div className="p-5 bg-zinc-900/80 border border-emerald-500/30 rounded-3xl flex flex-col justify-between space-y-4 shadow-lg">
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-emerald-400 font-black text-sm uppercase tracking-wider">
+                                <Sparkles size={16} /> Create Design & Solve with AI
+                              </div>
+                              <p className="text-zinc-400 text-xs leading-relaxed">
+                                AI analyzes your image, deduces the answer, generates the logic/fun fact, and opens the studio so you can review and edit before posting or generating a WP article.
+                              </p>
+                              <div className="pt-2">
+                                <input
+                                  type="text"
+                                  value={customImageNotes}
+                                  onChange={(e) => setCustomImageNotes(e.target.value)}
+                                  placeholder="Optional note for AI (e.g. solve for x)..."
+                                  className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-emerald-400"
+                                />
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleDesignAndSolveWithAI}
+                              disabled={isAnalyzingCustomImage}
+                              className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-wider text-xs shadow-md"
+                            >
+                              {isAnalyzingCustomImage ? (
+                                <>
+                                  <Loader2 className="animate-spin" size={15} />
+                                  <span>Analyzing & Solving...</span>
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles size={15} />
+                                  <span>SOLVE & OPEN IN STUDIO</span>
+                                </>
+                              )}
+                            </button>
+                          </div>
+
+                          {/* Option 2: Schedule Straight Up */}
+                          <div className="p-5 bg-zinc-900/80 border border-[#0477CF]/40 rounded-3xl flex flex-col justify-between space-y-4 shadow-lg">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 text-[#0477CF] font-black text-sm uppercase tracking-wider">
+                                <Clock size={16} /> Schedule Straight Up
+                              </div>
+                              <p className="text-zinc-400 text-xs leading-relaxed">
+                                Wraps your image in the clean 1000×1000 card with your official logo & handle at the bottom. No answer or blog article required.
+                              </p>
+
+                              <div className="space-y-2 pt-1">
+                                <label className="text-[11px] font-bold text-zinc-300 block">
+                                  Social Media Caption:
+                                </label>
+                                <div className="flex gap-2">
+                                  <input
+                                    type="text"
+                                    value={customImageCaption}
+                                    onChange={(e) => setCustomImageCaption(e.target.value)}
+                                    placeholder="Type your caption or question..."
+                                    className="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF]"
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={handleSuggestCaption}
+                                    disabled={isSuggestingCaption}
+                                    title="Suggest hook with AI"
+                                    className="px-2.5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white rounded-xl text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
+                                  >
+                                    {isSuggestingCaption ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} className="text-[#0477CF]" />}
+                                    <span className="hidden sm:inline">Suggest</span>
+                                  </button>
+                                </div>
+
+                                <div className="pt-1">
+                                  <label className="text-[11px] font-bold text-zinc-400 block mb-1">
+                                    Category:
+                                  </label>
+                                  <select
+                                    value={customImageCategory}
+                                    onChange={(e) => setCustomImageCategory(e.target.value as Category)}
+                                    className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-[#0477CF]"
+                                  >
+                                    {CATEGORIES_CONFIG.map((cat) => (
+                                      <option key={cat.name} value={cat.name}>
+                                        {cat.name}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={handleScheduleStraightUp}
+                              disabled={!customImageCaption.trim()}
+                              className="w-full bg-[#0477CF] hover:bg-blue-600 disabled:opacity-50 text-white font-black py-3 px-4 rounded-xl flex items-center justify-center gap-2 transition-all active:scale-95 uppercase tracking-wider text-xs shadow-md"
+                            >
+                              <Clock size={15} />
+                              <span>PREVIEW & ADD TO QUEUE</span>
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               <div className="pb-32 sm:pb-40">
@@ -1275,11 +1601,12 @@ const App: React.FC = () => {
                   {filteredPosts.map((post, postIndex) => {
                     let context: string | null = null;
                     let question = '';
+                    const isWyrPost = isWouldYouRather(post.category, post.visual_text);
 
-                    if (post.category === 'Would you rather') {
+                    if (isWyrPost) {
                       const { optionA, optionB } = parseWyr(post.visual_text || '');
-                      context = optionA ? `Option A: ${optionA}` : null;
-                      question = optionB ? `Option B: ${optionB}` : optionA;
+                      context = optionA || 'Option A';
+                      question = optionB || 'Option B';
                     } else {
                       const { cleanQuestion } = stripHookFromQuestion(post.visual_text || '');
                       const parts = (cleanQuestion || post.visual_text || '').split('|').map(s => s.trim());
@@ -1340,7 +1667,7 @@ const App: React.FC = () => {
                                     </span>
                                   )}
                                   <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">
-                                    {post.text_length || (parts.length > 1 ? 'medium' : 'short')}
+                                    {post.text_length || (isWyrPost ? 'short' : (context ? 'medium' : 'short'))}
                                   </span>
                                 </div>
                               </div>
@@ -1413,16 +1740,32 @@ const App: React.FC = () => {
                                 </div>
                               ) : null}
 
-                              <div className="space-y-1.5">
-                                {context && (
-                                  <p className="text-xs sm:text-sm font-semibold text-[#0F4C81] line-clamp-3">
-                                    {context}
-                                  </p>
-                                )}
-                                <h3 className="text-base sm:text-lg font-bold font-heading text-[#D92D46] leading-snug line-clamp-2">
-                                  {question}
-                                </h3>
-                              </div>
+                              {isWyrPost ? (
+                                <div className="space-y-2 py-1">
+                                  <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-[#0B3C68]">
+                                    <span>Would You Rather?</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 items-stretch">
+                                    <div className="bg-[#0F4C81] text-white p-2.5 rounded-xl text-center text-xs font-bold flex items-center justify-center leading-snug">
+                                      {context}
+                                    </div>
+                                    <div className="bg-[#D92D46] text-white p-2.5 rounded-xl text-center text-xs font-bold flex items-center justify-center leading-snug">
+                                      {question}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="space-y-1.5">
+                                  {context && (
+                                    <p className="text-xs sm:text-sm font-semibold text-[#0F4C81] line-clamp-3">
+                                      {context}
+                                    </p>
+                                  )}
+                                  <h3 className="text-base sm:text-lg font-bold font-heading text-[#D92D46] leading-snug line-clamp-2">
+                                    {question}
+                                  </h3>
+                                </div>
+                              )}
                             </div>
 
                             <div className="pt-3.5 flex items-center justify-between border-t border-zinc-100 mt-4">

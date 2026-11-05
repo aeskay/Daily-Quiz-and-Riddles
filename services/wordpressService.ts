@@ -61,6 +61,67 @@ export function getWordPressCategoryId(categoryName?: string): number {
   return WP_CATEGORY_MAP[categoryName.trim()] || 10;
 }
 
+let cachedWpCategories: { id: number; name: string; slug: string }[] | null = null;
+
+/**
+ * Dynamically resolves category ID from WordPress. If a category like "Would you rather"
+ * does not exist on WordPress yet, it attempts to auto-create it using credentials,
+ * or falls back to category 5 (Controversial) smoothly.
+ */
+export async function resolveWordPressCategoryId(config: WordPressConfig, categoryName?: string): Promise<number> {
+  if (!categoryName) return 10;
+  const norm = categoryName.trim().toLowerCase();
+
+  if (config.siteUrl) {
+    try {
+      const site = config.siteUrl.replace(/\/+$/, '');
+      if (!cachedWpCategories) {
+        const res = await fetch(`${site}/wp-json/wp/v2/categories?per_page=100`, {
+          headers: config.username && config.applicationPassword ? { 'Authorization': getAuthHeader(config) } : {}
+        });
+        if (res.ok) {
+          const list = await res.json();
+          if (Array.isArray(list)) {
+            cachedWpCategories = list.map((c: any) => ({ id: c.id, name: c.name, slug: c.slug }));
+          }
+        }
+      }
+
+      if (cachedWpCategories) {
+        const match = cachedWpCategories.find(c => 
+          c.name.toLowerCase() === norm || 
+          c.slug.toLowerCase() === norm.replace(/[^a-z0-9]+/g, '-') ||
+          (norm === 'would you rather' && (c.slug === 'would-you-rather' || c.name.toLowerCase().includes('would you rather')))
+        );
+        if (match) return match.id;
+
+        // If "Would you rather" doesn't exist on WP yet and we have credentials, auto-create it!
+        if (norm === 'would you rather' && config.username && config.applicationPassword) {
+          const createRes = await fetch(`${site}/wp-json/wp/v2/categories`, {
+            method: 'POST',
+            headers: {
+              'Authorization': getAuthHeader(config),
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ name: 'Would You Rather', slug: 'would-you-rather' })
+          });
+          if (createRes.ok) {
+            const created = await createRes.json();
+            if (created?.id) {
+              cachedWpCategories.push({ id: created.id, name: created.name, slug: created.slug });
+              return created.id;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.warn("Could not dynamically resolve/create category on WP:", e);
+    }
+  }
+
+  return getWordPressCategoryId(categoryName);
+}
+
 /**
  * Builds HTTP Basic Authentication header for WordPress Application Password
  */
@@ -152,7 +213,7 @@ export async function publishToWordPress(
     title = title.split('|').map(s => s.trim()).join(' — ');
   }
 
-  const categoryId = getWordPressCategoryId(params.post.category);
+  const categoryId = await resolveWordPressCategoryId(config, params.post.category);
 
   // If a featured image card isn't uploaded yet and an image exists, upload it now
   let mediaId = params.featuredMediaId;

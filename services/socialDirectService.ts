@@ -1,4 +1,4 @@
-import { QuizPost, SocialConfig } from "../types";
+import { QuizPost, SocialConfig, isWouldYouRather } from "../types";
 import { updateUserPost } from "./firestoreService";
 import { postToBuffer, postToAllBufferChannels, getBufferChannels, BufferChannel } from "./bufferService";
 
@@ -19,6 +19,7 @@ export function getCategoryHeader(category?: string): string {
     case 'Psychology':
       return '🧠 PSYCHOLOGY TRIVIA';
     case 'Would you rather':
+    case 'Controversial':
       return '💭 WOULD YOU RATHER?';
     default:
       return category ? `🧠 ${category.toUpperCase()}` : '🧠 QUIZ';
@@ -93,7 +94,16 @@ export function parseWouldYouRatherChoices(questionText: string, options?: strin
   let clean = (questionText || '').replace(/^would you rather\s*:?\s*/i, '').trim();
   clean = clean.replace(/[?.!]+$/, '').trim();
 
-  // Split on " or "
+  // 1. If pipe "|" delimited (e.g. "Option A | Option B")
+  if (clean.includes('|')) {
+    const parts = clean.split('|').map(s => s.trim());
+    return {
+      optionA: cleanOpt(parts[0]),
+      optionB: cleanOpt(parts.slice(1).join(' | ')),
+    };
+  }
+
+  // 2. Split on " or "
   const orRegex = /\s+or\s+/i;
   if (orRegex.test(clean)) {
     const parts = clean.split(orRegex);
@@ -147,12 +157,12 @@ export function buildSocialCaption(post: QuizPost): string {
   const header = getCategoryHeader(post.category);
   let mainText = '';
 
-  if (post.category === 'Would you rather') {
-    mainText = 'Which one are you choosing?';
+  if (isWouldYouRather(post.category, post.visual_text)) {
+    mainText = post.caption_hook?.trim() || 'The ultimate dilemma — which one are you choosing?';
   } else if (post.caption_hook && post.caption_hook.trim()) {
     mainText = post.caption_hook.trim();
   } else {
-    const { hook } = stripHookFromQuestion(post.question || '');
+    const { hook } = stripHookFromQuestion(post.visual_text || '');
     mainText = hook || getDefaultCategoryHook(post.category);
   }
 

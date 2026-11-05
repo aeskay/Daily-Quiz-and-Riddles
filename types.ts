@@ -6,15 +6,23 @@ export enum Category {
   Quiz = 'Quiz',
   FindTheMistake = 'Find the Mistake',
   Misconceptions = 'Misconceptions',
-  Controversial = 'Controversial',
+  WouldYouRather = 'Would you rather',
   FunFacts = 'Fun Facts',
   Blogs = 'Blogs',
-  All = 'All'
+  All = 'All',
+  // Backward compatibility aliases
+  Controversial = 'Controversial',
+  LogicMath = 'Logic & Math',
+  ScienceTech = 'Science & Tech',
+  GeneralKnowledge = 'General Knowledge',
+  LanguageLit = 'Language & Literature',
+  NatureAnimals = 'Nature & Animals',
+  Psychology = 'Psychology',
 }
 
 /**
- * Normalizes any category string (including legacy ones like Logic & Math, Would you rather)
- * to our active WordPress-aligned Category enum.
+ * Normalizes any category string (including legacy ones like Logic & Math, Controversial)
+ * to our active Category enum.
  */
 export function normalizeCategory(cat: string): Category {
   const c = (cat || '').trim().toLowerCase();
@@ -23,11 +31,27 @@ export function normalizeCategory(cat: string): Category {
   if (c === 'brain teasers' || c === 'brain teaser') return Category.BrainTeasers;
   if (c === 'find the mistake' || c === 'find mistake') return Category.FindTheMistake;
   if (c === 'misconceptions' || c === 'misconception' || c === 'psychology') return Category.Misconceptions;
-  if (c === 'controversial' || c === 'would you rather' || c === 'wyr') return Category.Controversial;
+  if (c === 'would you rather' || c === 'wyr' || c === 'controversial') return Category.WouldYouRather;
   if (c === 'fun facts' || c === 'nature & animals' || c === 'animals' || c === 'nature') return Category.FunFacts;
   if (c === 'blogs' || c === 'blog') return Category.Blogs;
   if (c === 'quiz' || c === 'science & tech' || c === 'general knowledge' || c === 'language & literature') return Category.Quiz;
   return Category.Quiz;
+}
+
+/**
+ * Helper to identify Would You Rather posts regardless of whether they were stored
+ * as "Would you rather", "Controversial", "wyr", or formatted with a question prefix.
+ */
+export function isWouldYouRather(category?: string, text?: string): boolean {
+  if (category) {
+    const c = category.trim().toLowerCase();
+    if (c === 'would you rather' || c === 'wyr' || c === 'controversial') return true;
+  }
+  if (text) {
+    const t = text.trim().toLowerCase();
+    if (t.startsWith('would you rather') || t.includes('would you rather?')) return true;
+  }
+  return false;
 }
 
 export interface QuizPost {
@@ -73,6 +97,11 @@ export interface QuizPost {
   wpTags?: string[];
   wpMetaDescription?: string;
   wpFocusKeyword?: string;
+
+  /** Card layout style */
+  layout?: 'auto' | 'side' | 'center' | 'text-only' | 'wyr' | 'image-only';
+  /** Flag for direct image-only posts that skip answers/WP articles */
+  isDirectImage?: boolean;
 }
 
 export interface WordPressConfig {

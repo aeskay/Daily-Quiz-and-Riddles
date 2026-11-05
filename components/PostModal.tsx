@@ -4,7 +4,7 @@ import {
   Image as ImageIcon, Loader2, Upload, 
   Search, Edit3, ChevronRight, Clock, Send, Check, BookOpen, Globe, ExternalLink, Sparkles
 } from 'lucide-react';
-import { QuizPost } from '../types';
+import { QuizPost, isWouldYouRather } from '../types';
 import { fetchVectorImage, fetchPixabayList } from '../services/imageService';
 import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
@@ -22,26 +22,42 @@ interface PostModalProps {
 }
 
 
-type LayoutType = 'auto' | 'side' | 'center' | 'text-only' | 'wyr';
+type LayoutType = 'auto' | 'side' | 'center' | 'text-only' | 'wyr' | 'image-only';
 
 /** Official branding block scaled for 1000px canvas */
 const CanvasBranding: React.FC = () => (
-  <div style={{ position: 'absolute', bottom: '50px', right: '60px', display: 'flex', alignItems: 'center', gap: '14px', zIndex: 10 }} className="select-none">
+  <div 
+    style={{ 
+      position: 'absolute', 
+      bottom: '40px', 
+      right: '50px', 
+      display: 'flex', 
+      alignItems: 'center', 
+      gap: '14px', 
+      zIndex: 10,
+      backgroundColor: 'rgba(255, 255, 255, 0.94)',
+      padding: '8px 18px',
+      borderRadius: '24px',
+      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+      border: '1px solid rgba(226, 232, 240, 0.8)'
+    }} 
+    className="select-none"
+  >
     <img
       src={LOGO_DATA_URL}
       alt="Daily Quiz & Riddles Logo"
-      style={{ width: '64px', height: '64px', objectFit: 'contain', flexShrink: 0 }}
+      style={{ width: '56px', height: '56px', objectFit: 'contain', flexShrink: 0 }}
     />
     <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', minWidth: 'max-content', whiteSpace: 'nowrap' }}>
       <span 
         className="font-script" 
         style={{ 
           fontFamily: "'Dancing Script', cursive, sans-serif",
-          fontSize: '30px', 
+          fontSize: '28px', 
           color: '#0A4B78', 
           letterSpacing: '0.5px',
           whiteSpace: 'nowrap',
-          lineHeight: '34px',
+          lineHeight: '32px',
           display: 'block'
         }}
       >
@@ -49,11 +65,11 @@ const CanvasBranding: React.FC = () => (
       </span>
       <span 
         style={{ 
-          fontSize: '18px', 
+          fontSize: '17px', 
           color: '#0A4B78', 
           fontWeight: 700, 
           whiteSpace: 'nowrap',
-          lineHeight: '22px',
+          lineHeight: '20px',
           display: 'block',
           marginTop: '2px'
         }}
@@ -68,18 +84,22 @@ export interface Canvas1000Props {
   contextText: string;
   questionText: string;
   imageUrl: string | null;
-  resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr';
+  resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr' | 'image-only';
 }
 
 export function getCardTextAndLayout(post: QuizPost): {
   contextText: string;
   questionText: string;
-  resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr';
+  resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr' | 'image-only';
 } {
+  if (post.layout === 'image-only') {
+    return { contextText: '', questionText: '', resolvedLayout: 'image-only' };
+  }
+
   let contextText = '';
   let questionText = '';
 
-  if (post.category === 'Would you rather') {
+  if (isWouldYouRather(post.category, post.visual_text)) {
     const { optionA, optionB } = parseWyr(post.visual_text || '');
     contextText = optionA;
     questionText = optionB;
@@ -97,7 +117,12 @@ export function getCardTextAndLayout(post: QuizPost): {
     questionText = parts[0] || '';
   }
 
-  const resolvedLayout = (!post.imageUrl) ? 'text-only' : (contextText && questionText) ? 'side' : 'center';
+  let resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr' | 'image-only';
+  if (post.layout && post.layout !== 'auto') {
+    resolvedLayout = post.layout;
+  } else {
+    resolvedLayout = (!post.imageUrl) ? 'text-only' : (contextText && questionText) ? 'side' : 'center';
+  }
   return { contextText, questionText, resolvedLayout };
 }
 
@@ -249,6 +274,47 @@ export const Canvas1000: React.FC<Canvas1000Props> = ({
       <CanvasBranding />
     </div>
   );
+
+  // ── Layout 5: Image Only (Full Square Graphic + Bottom Right Branding) ──────
+  if (resolvedLayout === 'image-only') {
+    return (
+      <div 
+        style={{ 
+          width: '1000px', 
+          height: '1000px', 
+          padding: '40px', 
+          position: 'relative', 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          boxSizing: 'border-box' 
+        }} 
+        className="bg-white select-none"
+      >
+        {imageUrl ? (
+          <img
+            src={imageUrl}
+            alt="puzzle graphic"
+            crossOrigin="anonymous"
+            style={{ 
+              maxHeight: '860px', 
+              maxWidth: '920px', 
+              objectFit: 'contain',
+              borderRadius: '16px'
+            }}
+          />
+        ) : (
+          <div style={{ width: '280px', height: '280px', borderRadius: '30px', backgroundColor: '#f8fafc', border: '2px dashed #e2e8f0', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: '#94a3b8' }}>
+            <ImageIcon size={64} />
+            <span style={{ fontSize: '18px', fontWeight: 700, marginTop: '10px' }}>Upload or Select an Image</span>
+          </div>
+        )}
+
+        {/* Pinned Branding */}
+        <CanvasBranding />
+      </div>
+    );
+  }
 };
 
 // ── Main PostModal Component ───────────────────────────────────────────────────
@@ -301,6 +367,9 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   const [questionText, setQuestionText] = useState('');
   const [customKeyword, setCustomKeyword] = useState('');
   const [isEditing, setIsEditing] = useState(false);
+  const [answerText, setAnswerText] = useState('');
+  const [logicText, setLogicText] = useState('');
+  const [captionHookText, setCaptionHookText] = useState('');
 
   const exportRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -333,13 +402,34 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
       imageUrl: imageUrl || post.imageUrl || '',
       renderedImageUrl: renderedStorageUrl || post.renderedImageUrl,
       image_keyword: customKeyword || post.image_keyword,
+      answer: answerText !== undefined ? answerText : post.answer,
+      read_more_content: logicText !== undefined ? logicText : post.read_more_content,
+      caption_hook: captionHookText !== undefined ? captionHookText : post.caption_hook,
+      layout: selectedLayout,
     };
+  };
+
+  const handleFieldUpdate = (partial: Partial<QuizPost>) => {
+    if (post?.userId) {
+      const updated = { ...getUpdatedPost(), ...partial };
+      updateUserPost(post.userId, updated);
+      onPostUpdated?.(updated);
+    }
+  };
+
+  const handleSelectLayout = (layout: LayoutType) => {
+    setSelectedLayout(layout);
+    if (post?.userId) {
+      const updated = { ...getUpdatedPost(), layout };
+      updateUserPost(post.userId, updated);
+      onPostUpdated?.(updated);
+    }
   };
 
   const handleSelectVector = (url: string) => {
     setImageUrl(url);
     if (post?.userId) {
-      const updated = { ...post, imageUrl: url };
+      const updated = { ...getUpdatedPost(), imageUrl: url };
       updateUserPost(post.userId, updated);
       onPostUpdated?.(updated);
     }
@@ -349,7 +439,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
     setImageUrl(null);
     setSelectedLayout('text-only');
     if (post?.userId) {
-      const updated = { ...post, imageUrl: '' };
+      const updated = { ...getUpdatedPost(), imageUrl: '', layout: 'text-only' };
       updateUserPost(post.userId, updated);
       onPostUpdated?.(updated);
     }
@@ -361,7 +451,11 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
       if (
         updated.imageUrl !== post.imageUrl ||
         updated.visual_text !== post.visual_text ||
-        updated.image_keyword !== post.image_keyword
+        updated.image_keyword !== post.image_keyword ||
+        updated.answer !== post.answer ||
+        updated.read_more_content !== post.read_more_content ||
+        updated.caption_hook !== post.caption_hook ||
+        updated.layout !== post.layout
       ) {
         updateUserPost(post.userId, updated);
         onPostUpdated?.(updated);
@@ -374,7 +468,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   useEffect(() => {
     if (!post) return;
 
-    if (post.category === 'Would you rather') {
+    if (isWouldYouRather(post.category, post.visual_text)) {
       const { optionA, optionB } = parseWyr(post.visual_text || '');
       setContextText(optionA);
       setQuestionText(optionB);
@@ -393,12 +487,15 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
 
     const kw = post.image_keyword || post.category;
     setCustomKeyword(kw);
-    setSelectedLayout('auto');
+    setSelectedLayout(post.layout || 'auto');
+    setAnswerText(post.answer || '');
+    setLogicText(post.read_more_content || '');
+    setCaptionHookText(post.caption_hook || '');
     setImageUrl(post.imageUrl || null);
     setVectorCandidates([]);
 
     // Auto-fetch top vectors ONLY if post doesn't already have an assigned image
-    if (post.category !== 'Would you rather' && post.text_length !== 'long') {
+    if (!isWouldYouRather(post.category, post.visual_text) && post.text_length !== 'long') {
       setImageLoading(true);
       fetchPixabayList(kw).then(list => {
         if (list.length > 0) {
@@ -431,13 +528,14 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   if (!post) return null;
 
   // Resolve layout
-  const resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr' = (() => {
+  const resolvedLayout: 'side' | 'center' | 'text-only' | 'wyr' | 'image-only' = (() => {
     if (selectedLayout !== 'auto') {
-      return selectedLayout === 'side' ? 'side'
-        : selectedLayout === 'center' ? 'center'
-        : selectedLayout === 'wyr' ? 'wyr' : 'text-only';
+      return selectedLayout;
     }
-    if (post.category === 'Would you rather') return 'wyr';
+    if (post.layout && post.layout !== 'auto') {
+      return post.layout;
+    }
+    if (isWouldYouRather(post.category, post.visual_text)) return 'wyr';
     if (!imageUrl && !imageLoading) return 'text-only';
     if (contextText && questionText) return 'side';
     return 'center';
@@ -764,29 +862,43 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
           {/* Layout Selector Pills */}
           <div className="w-full flex items-center justify-center gap-1.5 bg-zinc-900/90 p-1.5 rounded-2xl border border-zinc-800 text-[11px] font-bold overflow-x-auto">
             <button
-              onClick={() => setSelectedLayout('auto')}
+              onClick={() => handleSelectLayout('auto')}
               className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'auto' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
             >
               Auto
             </button>
             <button
-              onClick={() => setSelectedLayout('side')}
+              onClick={() => handleSelectLayout('side')}
               className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'side' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
             >
               Side by Side
             </button>
             <button
-              onClick={() => setSelectedLayout('center')}
+              onClick={() => handleSelectLayout('center')}
               className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'center' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
             >
               Center Image
             </button>
             <button
-              onClick={() => setSelectedLayout('text-only')}
+              onClick={() => handleSelectLayout('text-only')}
               className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'text-only' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
             >
               Text Only
             </button>
+            <button
+              onClick={() => handleSelectLayout('image-only')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'image-only' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
+            >
+              Image Only
+            </button>
+            {isWouldYouRather(post.category, post.visual_text) && (
+              <button
+                onClick={() => handleSelectLayout('wyr')}
+                className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'wyr' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
+              >
+                WYR Boxes
+              </button>
+            )}
           </div>
 
           {/* Exportable Square Post Card Container (Scaled dynamically to previewSize) */}
@@ -895,7 +1007,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                   >
                     𝕏 Tweet
                   </button>
-                  {onWriteArticle && (
+                  {!post.isDirectImage && onWriteArticle && (
                     <button
                       onClick={async () => {
                         if (!onWriteArticle || !post) return;
@@ -1039,62 +1151,125 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
               </div>
             </div>
 
-            {/* Text Editor Toggle */}
-            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 space-y-3">
-              <button
-                onClick={() => setIsEditing(!isEditing)}
-                className="w-full flex items-center justify-between text-xs font-bold text-zinc-300"
-              >
+            {/* Social Caption Hook Editor */}
+            <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 space-y-2">
+              <div className="flex items-center justify-between text-xs font-bold text-zinc-300">
                 <span className="flex items-center gap-2">
-                  <Edit3 size={14} className="text-[#0477CF]" /> Edit Post Text
+                  <Send size={13} className="text-[#0477CF]" /> Social Caption Hook
                 </span>
-                <span className="text-[11px] text-[#0477CF] font-medium">{isEditing ? 'Collapse' : 'Expand'}</span>
-              </button>
-
-              {isEditing && (
-                <div className="space-y-3 pt-2">
-                  <div>
-                    <label className="text-[11px] text-zinc-400 block mb-1">
-                      {post.category === 'Would you rather' ? 'Option A (Left Blue Box)' : 'Context Setup (Top, Navy)'}
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={contextText}
-                      onChange={(e) => setContextText(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#0477CF]"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[11px] text-zinc-400 block mb-1">
-                      {post.category === 'Would you rather' ? 'Option B (Right Red Box)' : 'Question / Highlight (Red)'}
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={questionText}
-                      onChange={(e) => setQuestionText(e.target.value)}
-                      className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#0477CF]"
-                    />
-                  </div>
-                </div>
-              )}
+                <span className="text-[10px] text-zinc-500 font-normal">Appears on X / Facebook / IG</span>
+              </div>
+              <input
+                type="text"
+                value={captionHookText}
+                onChange={(e) => {
+                  setCaptionHookText(e.target.value);
+                  handleFieldUpdate({ caption_hook: e.target.value });
+                }}
+                placeholder="e.g. Can you solve this? What's your answer? 👇"
+                className="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3 py-2 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-[#0477CF] transition-colors"
+              />
             </div>
 
-            {/* Answer & Explanation */}
-            <div className="space-y-3">
-              <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4">
-                <div className="flex items-center gap-2 text-emerald-400 font-bold text-[11px] mb-1.5 uppercase tracking-wider">
-                  <CheckCircle2 size={14} /> Correct Answer
-                </div>
-                <p className="text-emerald-100 font-bold text-base">{post.answer}</p>
-              </div>
+            {/* Text Editor Toggle */}
+            {selectedLayout !== 'image-only' && (
+              <div className="bg-zinc-900 border border-zinc-800/80 rounded-2xl p-4 space-y-3">
+                <button
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-zinc-300"
+                >
+                  <span className="flex items-center gap-2">
+                    <Edit3 size={14} className="text-[#0477CF]" /> Edit Card Text
+                  </span>
+                  <span className="text-[11px] text-[#0477CF] font-medium">{isEditing ? 'Collapse' : 'Expand'}</span>
+                </button>
 
-              <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4">
-                <div className="flex items-center gap-2 text-blue-400 font-bold text-[11px] mb-1.5 uppercase tracking-wider">
-                  <Info size={14} /> The Logic / Fun Fact
-                </div>
-                <p className="text-zinc-300 text-xs leading-relaxed italic">{post.read_more_content}</p>
+                {isEditing && (
+                  <div className="space-y-3 pt-2">
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">
+                        {isWouldYouRather(post.category, post.visual_text) ? 'Option A (Left Blue Box)' : 'Context Setup (Top, Navy)'}
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={contextText}
+                        onChange={(e) => {
+                          setContextText(e.target.value);
+                          handleFieldUpdate({ visual_text: e.target.value ? `${e.target.value} | ${questionText}` : questionText });
+                        }}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#0477CF]"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] text-zinc-400 block mb-1">
+                        {isWouldYouRather(post.category, post.visual_text) ? 'Option B (Right Red Box)' : 'Question / Highlight (Red)'}
+                      </label>
+                      <textarea
+                        rows={2}
+                        value={questionText}
+                        onChange={(e) => {
+                          setQuestionText(e.target.value);
+                          handleFieldUpdate({ visual_text: contextText ? `${contextText} | ${e.target.value}` : e.target.value });
+                        }}
+                        className="w-full bg-zinc-950 border border-zinc-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-[#0477CF]"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
-            </div>
+            )}
+
+            {/* Answer & Explanation (Editable, or hidden if post.isDirectImage) */}
+            {!post.isDirectImage ? (
+              <div className="space-y-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between text-emerald-400 font-bold text-[11px] uppercase tracking-wider">
+                    <span className="flex items-center gap-2">
+                      <CheckCircle2 size={14} /> Correct Answer
+                    </span>
+                    <span className="text-[10px] text-emerald-400/80 font-normal">Click to edit</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={answerText}
+                    onChange={(e) => {
+                      setAnswerText(e.target.value);
+                      handleFieldUpdate({ answer: e.target.value });
+                    }}
+                    placeholder="Enter the correct answer..."
+                    className="w-full bg-zinc-950/90 border border-emerald-500/30 rounded-xl px-3 py-2 text-sm font-bold text-emerald-100 placeholder-emerald-700/50 focus:outline-none focus:border-emerald-400 transition-colors"
+                  />
+                </div>
+
+                <div className="bg-blue-500/10 border border-blue-500/20 rounded-2xl p-4 space-y-2">
+                  <div className="flex items-center justify-between text-blue-400 font-bold text-[11px] uppercase tracking-wider">
+                    <span className="flex items-center gap-2">
+                      <Info size={14} /> The Logic / Fun Fact
+                    </span>
+                    <span className="text-[10px] text-blue-400/80 font-normal">Used for WP Article</span>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={logicText}
+                    onChange={(e) => {
+                      setLogicText(e.target.value);
+                      handleFieldUpdate({ read_more_content: e.target.value });
+                    }}
+                    placeholder="Explain the step-by-step logic, pattern, or fun fact..."
+                    className="w-full bg-zinc-950/90 border border-blue-500/30 rounded-xl p-3 text-xs leading-relaxed text-zinc-200 placeholder-blue-700/50 focus:outline-none focus:border-blue-400 resize-none transition-colors"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="bg-zinc-900/60 border border-zinc-800 rounded-2xl p-4 space-y-1.5 text-center">
+                <span className="text-xs font-bold text-zinc-300 flex items-center justify-center gap-1.5">
+                  <ImageIcon size={14} className="text-[#0477CF]" /> Direct Image-Only Post
+                </span>
+                <p className="text-[11px] text-zinc-500">
+                  Ready to queue with your branded 1000×1000 card and custom caption. Answer and WP article are skipped.
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="pt-2">

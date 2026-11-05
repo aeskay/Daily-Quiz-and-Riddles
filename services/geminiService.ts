@@ -85,7 +85,7 @@ function assignId(item: any, index = 0): QuizPost {
 }
 
 /** Calls Gemini with primary gemini-2.5-flash and automatic fallback to gemini-3.8-flash */
-async function generateWithModelFallback(ai: GoogleGenAI, contents: string, systemInstruction: string, schema: any): Promise<any> {
+async function generateWithModelFallback(ai: GoogleGenAI, contents: any, systemInstruction: string, schema: any): Promise<any> {
   const models = ['gemini-2.5-flash', 'gemini-3.8-flash'];
   let lastErr: any;
 
@@ -146,7 +146,7 @@ export async function generateCustomEnigma(userRequest: string): Promise<QuizPos
   return withRetry(async () => {
     const ai = new GoogleGenAI({ apiKey });
     const prompt = `Create a custom, high-engagement viral quiz or riddle post based on this request: "${userRequest}". 
-Ensure the visual_text is clean and punchy, caption_hook is a viral 1-sentence teaser, answer reveals the twist, read_more_content explains the logic, and category is one of: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Controversial, Fun Facts, Blogs.`;
+Ensure the visual_text is clean and punchy, caption_hook is a viral 1-sentence teaser, answer reveals the twist, read_more_content explains the logic, and category is one of: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Would you rather, Fun Facts, Blogs.`;
 
     const response = await generateWithModelFallback(
       ai,
@@ -158,6 +158,90 @@ Ensure the visual_text is clean and punchy, caption_hook is a viral 1-sentence t
     const parsed = JSON.parse(response.text || "{}");
     return assignId(parsed, 0);
   });
+}
+
+/**
+ * Analyzes an uploaded riddle/puzzle/math image with Gemini Multimodal Vision,
+ * extracts the challenge, solves for the answer, generates the logic, and formats as a QuizPost.
+ */
+export async function analyzeAndSolveEnigmaImage(
+  base64Data: string,
+  mimeType: string,
+  userNotes?: string
+): Promise<QuizPost> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) {
+    throw new Error("Missing Gemini API Key. Click 'Settings' in the sidebar to add your key.");
+  }
+
+  const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const cleanMime = mimeType || 'image/jpeg';
+
+  return withRetry(async () => {
+    const ai = new GoogleGenAI({ apiKey });
+    const userPrompt = `You are an expert viral puzzle and riddle analyst for "Daily Quiz and Riddles" (quizandriddles.com).
+The user uploaded an image containing a puzzle, riddle, math problem, traffic intersection scenario, brain teaser, or quiz question.
+${userNotes ? `Additional user notes: "${userNotes}"\n` : ''}
+
+Carefully inspect and analyze the image:
+1. Transcribe the puzzle, riddle, or question text into 'visual_text'. If there is setup context and a question, separate with pipe: "Context sentence | Question text?".
+2. Solve the challenge with 100% precision! Provide the clear, accurate answer in 'answer'.
+3. In 'read_more_content', provide the step-by-step logic, mathematical proof, right-of-way rule, or clever riddle explanation explaining WHY the answer is correct (this will be used directly in the WordPress reveal article).
+4. Craft a punchy, 1-sentence viral social media caption hook in 'caption_hook' (e.g. "Only 5% know the right of way order here!", "Can you spot the fatal flaw in the alibi?", "Viral math trap — what is your answer?").
+5. Choose the best category: "Riddles", "Puzzles", "Brain Teasers", "Quiz", "Find the Mistake", "Misconceptions", "Controversial", "Fun Facts", or "Blogs".
+6. Provide a concise 1-2 word keyword describing the core subject in 'image_keyword'.
+7. Set 'text_length' to 'medium'.`;
+
+    const contents = [
+      {
+        inlineData: {
+          mimeType: cleanMime,
+          data: cleanBase64,
+        },
+      },
+      userPrompt,
+    ];
+
+    const response = await generateWithModelFallback(
+      ai,
+      contents,
+      SYSTEM_INSTRUCTIONS,
+      POST_SCHEMA
+    );
+
+    const parsed = JSON.parse(response.text || "{}");
+    const post = assignId(parsed, 0);
+    post.layout = 'image-only'; // Default to Image Only for uploaded image puzzles
+    return post;
+  });
+}
+
+/**
+ * Lightweight helper to suggest a viral 1-sentence caption hook for an uploaded image.
+ */
+export async function generateCaptionForImage(
+  base64Data: string,
+  mimeType: string
+): Promise<string> {
+  const apiKey = getGeminiApiKey();
+  if (!apiKey) return "Can you solve this puzzle? Drop your answer in the comments! 👇";
+
+  const cleanBase64 = base64Data.includes(',') ? base64Data.split(',')[1] : base64Data;
+  const cleanMime = mimeType || 'image/jpeg';
+
+  try {
+    const ai = new GoogleGenAI({ apiKey });
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: [
+        { inlineData: { mimeType: cleanMime, data: cleanBase64 } },
+        "Write a single, short, viral 1-sentence social media hook/caption for this puzzle image. Do not reveal the answer. Output only the plain sentence without quotation marks."
+      ]
+    });
+    return response.text?.trim().replace(/^["']|["']$/g, '') || "Can you solve this puzzle? Drop your answer below! 👇";
+  } catch (e) {
+    return "Can you solve this puzzle? Drop your answer below! 👇";
+  }
 }
 
 /**
@@ -320,7 +404,7 @@ export const Prompts = {
     return `Generate 8 viral, fast-scrolling TikTok & blog-ready quiz and riddle posts.
 ZERO school homework or exam questions (NEVER Ohm's law, NEVER physics formulas, NEVER gold foil experiments, NEVER dry textbook history).
 Focus on: brain-glitch trick questions (e.g. "If you pass the person in 2nd place..."), viral math disputes (e.g. "5 + 5 × 5 - 5 = ?"), number sequence puzzles (e.g. Look and Say), mind-blowing "did you know" wonders (pink hippo milk, Mars blue sunsets), and clever wordplay riddles.
-Mix categories across: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Controversial, and Fun Facts. [Seed: ${seed}]${avoidClause}`;
+Mix categories across: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, Misconceptions, Would you rather, and Fun Facts. [Seed: ${seed}]${avoidClause}`;
   },
 
   getCategory: (category: Category, recentTitles: string[] = []) => {
@@ -342,8 +426,8 @@ Mix categories across: Riddles, Puzzles, Brain Teasers, Quiz, Find the Mistake, 
       categoryGuidance = 'MANDATORY: Subtle error spotting in sentences, math equations, or situations (e.g. repeated words like "in the the", arithmetic misdirection).';
     } else if (category === Category.Misconceptions) {
       categoryGuidance = 'MANDATORY: Psychology and everyday human myths debunked (e.g. goldfish memory, 10% brain myth, bulls hating red).';
-    } else if (category === Category.Controversial) {
-      categoryGuidance = 'MANDATORY: Would You Rather lifestyle dilemmas or polarizing debate questions that start heated comment wars.';
+    } else if (category === Category.WouldYouRather || (category as any) === 'Would you rather' || (category as any) === 'Controversial') {
+      categoryGuidance = 'MANDATORY: Impossible, highly polarizing "Would You Rather" dilemmas that start heated debates. visual_text MUST be: "Option A text | Option B text" (e.g. "Only be able to whisper | Only be able to shout"). NEVER put "Would you rather" in visual_text! category MUST be "Would you rather".';
     } else if (category === Category.FunFacts) {
       categoryGuidance = 'MANDATORY: Bizarre, unbelievable animal and world facts (wombats cubic poop, hummingbirds flying backwards, sea otter fur density).';
     } else if (category === Category.Blogs) {

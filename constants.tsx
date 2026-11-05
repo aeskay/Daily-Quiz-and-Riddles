@@ -19,7 +19,7 @@ export const CATEGORIES_CONFIG = [
   { name: Category.Quiz, icon: <Zap className="w-5 h-5" />, color: 'text-yellow-600' },
   { name: Category.FindTheMistake, icon: <AlertCircle className="w-5 h-5" />, color: 'text-rose-600' },
   { name: Category.Misconceptions, icon: <Sparkles className="w-5 h-5" />, color: 'text-indigo-600' },
-  { name: Category.Controversial, icon: <Split className="w-5 h-5" />, color: 'text-orange-600' },
+  { name: Category.WouldYouRather, icon: <Split className="w-5 h-5" />, color: 'text-orange-600' },
   { name: Category.FunFacts, icon: <Leaf className="w-5 h-5" />, color: 'text-emerald-600' },
   { name: Category.Blogs, icon: <BookOpen className="w-5 h-5" />, color: 'text-teal-600' },
 ];
@@ -35,7 +35,7 @@ Your #1 metric is TIKTOK & BLOG VIRALITY: content that triggers thousands of com
 - "Quiz": Surprising trivia questions with clear, fascinating answers.
 - "Find the Mistake": Spot the hidden error in a sentence, equation, or visual scenario.
 - "Misconceptions": Debunking widespread psychology, historical, and everyday human myths.
-- "Controversial": Would You Rather dilemmas, moral conundrums, and intense discussion starters.
+- "Would you rather": Impossible choices, polarizing dilemmas, and heated discussion starters.
 - "Fun Facts": Mind-blowing "NO WAY!" facts (e.g. hippo pink milk, Mars blue sunsets).
 - "Blogs": In-depth articles exploring sequences, riddles, or logic phenomena.
 
