@@ -255,6 +255,13 @@ export async function generateArticleForPost(
   post: QuizPost,
   relatedPosts?: QuizPost[]
 ): Promise<string> {
+  if (post.isDirectImage) {
+    throw new Error("Cannot generate an article for an image-only post.");
+  }
+  if (!post.answer || !post.answer.trim()) {
+    throw new Error("Cannot generate an article: Post answer is missing. Please provide the question and correct answer before generating an article.");
+  }
+
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new Error("Missing Gemini API Key. Click 'Settings' in the sidebar to add your key.");

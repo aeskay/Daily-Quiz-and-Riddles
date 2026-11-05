@@ -169,7 +169,14 @@ export function buildSocialCaption(post: QuizPost): string {
   let caption = `${header}\n\n${mainText}`;
 
   // If a WordPress article is published or scheduled, add the teaser CTA link!
-  if (post.wpPostUrl && post.wpPostUrl.startsWith('http')) {
+  // STRICT: Never for direct image posts, and never if answer is missing
+  if (
+    !post.isDirectImage &&
+    post.wpPostUrl &&
+    post.wpPostUrl.startsWith('http') &&
+    post.answer &&
+    post.answer.trim().length > 0
+  ) {
     caption += `\n\n👉 Full explanation & answer breakdown: ${post.wpPostUrl}`;
   }
 

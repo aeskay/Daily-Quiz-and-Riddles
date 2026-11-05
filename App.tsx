@@ -129,6 +129,14 @@ const App: React.FC = () => {
   };
 
   const handleGenerateArticle = async (post: QuizPost) => {
+    if (post.isDirectImage) {
+      setError("Image-only posts do not have WordPress articles.");
+      return;
+    }
+    if (!post.answer || !post.answer.trim()) {
+      setError("Cannot generate an article without an answer. Please edit the post and provide the riddle question and correct answer first.");
+      return;
+    }
     setIsGeneratingArticle(true);
     try {
       // Find published posts in the same category for internal SEO interlinking
@@ -628,7 +636,7 @@ const App: React.FC = () => {
     if (viewMode === ViewMode.Archive) {
       base = allPosts.filter(p => p.status === 'archived');
     } else if (viewMode === ViewMode.Articles) {
-      base = allPosts;
+      base = allPosts.filter(p => !p.isDirectImage);
     } else if (viewMode === ViewMode.Queue) {
       if (queueSubTab === 'queued') {
         base = allPosts.filter(p => p.scheduleStatus === 'queued');

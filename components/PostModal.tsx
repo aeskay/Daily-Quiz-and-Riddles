@@ -10,6 +10,8 @@ import { LOGO_DATA_URL } from '../services/logoData';
 import { uploadRenderedCard } from '../services/storageService';
 import { queuePostForAutopost, triggerPostNow, getLocalSocialConfig, getQueuedScheduleInfo, formatPostedDate, unqueuePost, reschedulePost, findNextAvailableSlotDate } from '../services/socialService';
 import { dispatchPostDirectly, buildSocialCaption, parseWyr, stripHookFromQuestion } from '../services/socialDirectService';
+import { publishToWordPress, getLocalWordPressConfig } from '../services/wordpressService';
+import { generateArticleForPost } from '../services/geminiService';
 import { updateUserPost } from '../services/firestoreService';
 import * as htmlToImage from 'html-to-image';
 
@@ -400,7 +402,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   const getUpdatedPost = (renderedStorageUrl?: string): QuizPost => {
     if (!post) throw new Error("No post");
     const newVisualText = contextText.trim() ? `${contextText.trim()} | ${questionText.trim()}` : questionText.trim();
-    return {
+    const updated: QuizPost = {
       ...post,
       visual_text: newVisualText || post.visual_text,
       imageUrl: imageUrl || post.imageUrl || '',
@@ -411,6 +413,13 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
       caption_hook: captionHookText !== undefined ? captionHookText : post.caption_hook,
       layout: selectedLayout,
     };
+    if (post.isDirectImage) {
+      delete updated.wpPostId;
+      delete updated.wpPostUrl;
+      delete updated.wpStatus;
+      delete updated.articleContent;
+    }
+    return updated;
   };
 
   const handleFieldUpdate = (partial: Partial<QuizPost>) => {
@@ -503,6 +512,19 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
     setCaptionHookText(post.caption_hook || '');
     setImageUrl(post.imageUrl || null);
     setVectorCandidates([]);
+
+    // If post is a direct image post, auto-clean any errant WordPress fields that might have been saved previously
+    if (post.isDirectImage && (post.wpPostUrl || post.articleContent || post.wpPostId)) {
+      const cleaned: QuizPost = { ...post };
+      delete cleaned.wpPostUrl;
+      delete cleaned.wpPostId;
+      delete cleaned.wpStatus;
+      delete cleaned.articleContent;
+      if (post.userId) {
+        updateUserPost(post.userId, cleaned);
+      }
+      onPostUpdated?.(cleaned);
+    }
 
     // Auto-fetch top vectors ONLY if post doesn't already have an assigned image
     if (!isWouldYouRather(post.category, post.visual_text) && post.layout !== 'wyr' && post.layout !== 'image-only' && post.text_length !== 'long') {
@@ -683,19 +705,64 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
     setIsPostingNow(true);
     setPostNowStatus("Rendering & uploading image...");
     try {
-      const dataUrl = await generateCardDataUrl();
-      const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
-      const postToPost = getUpdatedPost(storageUrl);
-      const queuedRes = await queuePostForAutopost(post.userId, postToPost, storageUrl, undefined, allPosts);
-      const postToDispatch = queuedRes.post || postToPost;
+      let storageUrl = post.renderedImageUrl;
+      if (!storageUrl || !storageUrl.startsWith('http')) {
+        const dataUrl = await generateCardDataUrl();
+        storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
+      }
+      let postToPost = getUpdatedPost(storageUrl);
+
+      // Handle Direct Image vs Standard Posts
+      if (postToPost.isDirectImage) {
+        // Direct image posts NEVER have WordPress articles or links
+        delete postToPost.wpPostId;
+        delete postToPost.wpPostUrl;
+        delete postToPost.wpStatus;
+        delete postToPost.articleContent;
+      } else {
+        // Standard post: if WordPress is enabled, publish article live NOW (status: 'publish')
+        const wpConfig = getLocalWordPressConfig();
+        if (wpConfig.enabled && postToPost.answer && postToPost.answer.trim().length > 0) {
+          try {
+            let articleHtml = postToPost.articleContent;
+            if (!articleHtml || !articleHtml.trim()) {
+              if (wpConfig.autoPublishWithQueue) {
+                setPostNowStatus("Generating article breakdown...");
+                const related = allPosts ? allPosts.filter(p => p.id !== post.id && p.wpPostUrl && p.category === post.category) : [];
+                articleHtml = await generateArticleForPost(postToPost, related);
+                postToPost.articleContent = articleHtml;
+              }
+            }
+
+            if (articleHtml && articleHtml.trim()) {
+              setPostNowStatus("Publishing article to WordPress live...");
+              const wpRes = await publishToWordPress(wpConfig, {
+                post: postToPost,
+                htmlContent: articleHtml,
+                status: 'publish', // Publish live immediately so the link works (never 404!)
+              });
+              postToPost = {
+                ...postToPost,
+                wpPostId: wpRes.id,
+                wpPostUrl: wpRes.link,
+                wpStatus: 'publish',
+                wpPublishedAt: Date.now(),
+              };
+            }
+          } catch (wpErr: any) {
+            console.warn("WordPress live publish during Post Now failed:", wpErr);
+          }
+        }
+      }
+
       setPostNowStatus("Publishing to socials...");
 
       const config = getLocalSocialConfig();
-      const res = await dispatchPostDirectly(postToDispatch, config, post.userId);
+      const res = await dispatchPostDirectly(postToPost, config, post.userId);
       if (res.success) {
         setPostNowStatus(`✅ Posted to: ${res.platforms.join(', ')}!`);
         const fullyPosted: QuizPost = { 
-          ...postToDispatch, 
+          ...postToPost, 
           scheduleStatus: 'posted', 
           postedPlatforms: res.platforms, 
           postedAt: Date.now() 

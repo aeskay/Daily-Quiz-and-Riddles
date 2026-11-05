@@ -333,7 +333,19 @@ export async function queuePostForAutopost(
   // If WordPress auto-publish with queue is enabled, generate & schedule article on WordPress first
   // so the live WordPress article URL can be automatically included in the social post caption!
   const wpConfig = getLocalWordPressConfig();
-  if (wpConfig.enabled && wpConfig.autoPublishWithQueue && (!post.wpStatus || post.wpStatus === 'draft' || post.wpStatus === 'future')) {
+  if (post.isDirectImage) {
+    // Direct image posts NEVER have WordPress articles or links
+    delete updated.wpPostId;
+    delete updated.wpPostUrl;
+    delete updated.wpStatus;
+    delete updated.articleContent;
+  } else if (
+    wpConfig.enabled && 
+    wpConfig.autoPublishWithQueue && 
+    post.answer && 
+    post.answer.trim().length > 0 && 
+    (!post.wpStatus || post.wpStatus === 'draft' || post.wpStatus === 'future')
+  ) {
     try {
       let articleHtml = post.articleContent;
       if (!articleHtml || !articleHtml.trim()) {
