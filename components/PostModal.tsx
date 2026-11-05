@@ -99,7 +99,7 @@ export function getCardTextAndLayout(post: QuizPost): {
   let contextText = '';
   let questionText = '';
 
-  if (isWouldYouRather(post.category, post.visual_text)) {
+  if (post.layout === 'wyr' || isWouldYouRather(post.category, post.visual_text)) {
     const { optionA, optionB } = parseWyr(post.visual_text || '');
     contextText = optionA;
     questionText = optionB;
@@ -244,36 +244,38 @@ export const Canvas1000: React.FC<Canvas1000Props> = ({
   }
 
   // ── Layout 4: Would You Rather ───────────────────────────────────────────────
-  const lenA = (contextText || '').length;
-  const fontA = lenA > 110 ? '26px' : lenA > 70 ? '30px' : lenA > 40 ? '34px' : '38px';
-  const lenB = (questionText || '').length;
-  const fontB = lenB > 110 ? '26px' : lenB > 70 ? '30px' : lenB > 40 ? '34px' : '38px';
+  if (resolvedLayout === 'wyr') {
+    const lenA = (contextText || '').length;
+    const fontA = lenA > 110 ? '26px' : lenA > 70 ? '30px' : lenA > 40 ? '34px' : '38px';
+    const lenB = (questionText || '').length;
+    const fontB = lenB > 110 ? '26px' : lenB > 70 ? '30px' : lenB > 40 ? '34px' : '38px';
 
-  return (
-    <div style={{ width: '1000px', height: '1000px', padding: '80px', position: 'relative', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }} className="bg-white select-none">
-      <h2 style={{ fontSize: '48px', fontWeight: 900, color: '#0B3C68', textAlign: 'center', marginBottom: '45px' }}>
-        Would You Rather?
-      </h2>
+    return (
+      <div style={{ width: '1000px', height: '1000px', padding: '80px', position: 'relative', display: 'flex', flexDirection: 'column', boxSizing: 'border-box' }} className="bg-white select-none">
+        <h2 style={{ fontSize: '48px', fontWeight: 900, color: '#0B3C68', textAlign: 'center', marginBottom: '45px' }}>
+          Would You Rather?
+        </h2>
 
-      <div style={{ display: 'flex', alignItems: 'stretch', gap: '30px', flex: 1, maxHeight: '480px', marginBottom: '80px' }}>
-        <div style={{ flex: 1, backgroundColor: '#0F4C81', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <p style={{ fontSize: fontA, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
-            {contextText || 'Option A'}
-          </p>
+        <div style={{ display: 'flex', alignItems: 'stretch', gap: '30px', flex: 1, maxHeight: '480px', marginBottom: '80px' }}>
+          <div style={{ flex: 1, backgroundColor: '#0F4C81', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+            <p style={{ fontSize: fontA, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
+              {contextText || 'Option A'}
+            </p>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+            <span style={{ fontSize: '26px', fontWeight: 900, color: '#94a3b8', padding: '10px' }}>OR</span>
+          </div>
+          <div style={{ flex: 1, backgroundColor: '#D92D46', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+            <p style={{ fontSize: fontB, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
+              {questionText || 'Option B'}
+            </p>
+          </div>
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-          <span style={{ fontSize: '26px', fontWeight: 900, color: '#94a3b8', padding: '10px' }}>OR</span>
-        </div>
-        <div style={{ flex: 1, backgroundColor: '#D92D46', color: 'white', borderRadius: '36px', padding: '40px 32px', display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
-          <p style={{ fontSize: fontB, fontWeight: 700, lineHeight: 1.35, margin: 0 }}>
-            {questionText || 'Option B'}
-          </p>
-        </div>
+
+        <CanvasBranding />
       </div>
-
-      <CanvasBranding />
-    </div>
-  );
+    );
+  }
 
   // ── Layout 5: Image Only (Full Square Graphic + Bottom Right Branding) ──────
   if (resolvedLayout === 'image-only') {
@@ -315,6 +317,8 @@ export const Canvas1000: React.FC<Canvas1000Props> = ({
       </div>
     );
   }
+
+  return null;
 };
 
 // ── Main PostModal Component ───────────────────────────────────────────────────
@@ -419,6 +423,12 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
 
   const handleSelectLayout = (layout: LayoutType) => {
     setSelectedLayout(layout);
+    if (layout === 'wyr') {
+      const textToParse = post?.visual_text || (contextText ? `${contextText} | ${questionText}` : questionText);
+      const { optionA, optionB } = parseWyr(textToParse);
+      setContextText(optionA || contextText || 'Option A');
+      setQuestionText(optionB || questionText || 'Option B');
+    }
     if (post?.userId) {
       const updated = { ...getUpdatedPost(), layout };
       updateUserPost(post.userId, updated);
@@ -468,10 +478,10 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
   useEffect(() => {
     if (!post) return;
 
-    if (isWouldYouRather(post.category, post.visual_text)) {
+    if (post.layout === 'wyr' || isWouldYouRather(post.category, post.visual_text)) {
       const { optionA, optionB } = parseWyr(post.visual_text || '');
-      setContextText(optionA);
-      setQuestionText(optionB);
+      setContextText(optionA || 'Option A');
+      setQuestionText(optionB || 'Option B');
     } else {
       const { cleanQuestion } = stripHookFromQuestion(post.visual_text || '');
       const textToUse = cleanQuestion || post.visual_text || '';
@@ -495,7 +505,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
     setVectorCandidates([]);
 
     // Auto-fetch top vectors ONLY if post doesn't already have an assigned image
-    if (!isWouldYouRather(post.category, post.visual_text) && post.text_length !== 'long') {
+    if (!isWouldYouRather(post.category, post.visual_text) && post.layout !== 'wyr' && post.layout !== 'image-only' && post.text_length !== 'long') {
       setImageLoading(true);
       fetchPixabayList(kw).then(list => {
         if (list.length > 0) {
@@ -891,14 +901,12 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
             >
               Image Only
             </button>
-            {isWouldYouRather(post.category, post.visual_text) && (
-              <button
-                onClick={() => handleSelectLayout('wyr')}
-                className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'wyr' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
-              >
-                WYR Boxes
-              </button>
-            )}
+            <button
+              onClick={() => handleSelectLayout('wyr')}
+              className={`px-3 py-1.5 rounded-xl transition-all ${selectedLayout === 'wyr' ? 'bg-[#0477CF] text-white shadow' : 'text-zinc-400 hover:text-white'}`}
+            >
+              WYR Boxes
+            </button>
           </div>
 
           {/* Exportable Square Post Card Container (Scaled dynamically to previewSize) */}
@@ -1188,7 +1196,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                   <div className="space-y-3 pt-2">
                     <div>
                       <label className="text-[11px] text-zinc-400 block mb-1">
-                        {isWouldYouRather(post.category, post.visual_text) ? 'Option A (Left Blue Box)' : 'Context Setup (Top, Navy)'}
+                        {(selectedLayout === 'wyr' || isWouldYouRather(post.category, post.visual_text)) ? 'Option A (Left Blue Box)' : 'Context Setup (Top, Navy)'}
                       </label>
                       <textarea
                         rows={2}
@@ -1202,7 +1210,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                     </div>
                     <div>
                       <label className="text-[11px] text-zinc-400 block mb-1">
-                        {isWouldYouRather(post.category, post.visual_text) ? 'Option B (Right Red Box)' : 'Question / Highlight (Red)'}
+                        {(selectedLayout === 'wyr' || isWouldYouRather(post.category, post.visual_text)) ? 'Option B (Right Red Box)' : 'Question / Highlight (Red)'}
                       </label>
                       <textarea
                         rows={2}
