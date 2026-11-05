@@ -80,7 +80,28 @@ export async function uploadRenderedCard(
     console.warn("Firebase Storage unavailable (bucket not created yet or CORS pending), using direct compressed image data");
   }
 
-  // 3. Robust fallback: return the high-quality compressed JPEG dataUrl (~80KB)
+  // 3. Fallback: Free public image host (FreeImage.host)
+  try {
+    const base64Data = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    const formData = new FormData();
+    formData.append('key', '6d207e02198a847aa98d0a2a901485a5');
+    formData.append('action', 'upload');
+    formData.append('source', base64Data);
+    formData.append('format', 'json');
+
+    const res = await fetch('https://freeimage.host/api/1/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const json = await res.json();
+    if (json && json.status_code === 200 && json.image?.url) {
+      return json.image.url;
+    }
+  } catch (err) {
+    console.warn("FreeImage.host fallback unavailable:", err);
+  }
+
+  // 4. Robust fallback: return the high-quality compressed JPEG dataUrl (~80KB)
   // Fits easily within Firestore's 1MB document limit, and Facebook Graph API uploads it directly as a photo
   return dataUrl;
 }

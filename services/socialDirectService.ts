@@ -183,10 +183,11 @@ export function buildSocialCaption(post: QuizPost): string {
  * - Twitter / X (quiz_riddles)
  */
 export async function dispatchPostDirectly(
-  post: QuizPost,
+  postInput: QuizPost | { post: QuizPost },
   social: SocialConfig,
   userId: string
 ): Promise<{ success: boolean; platforms: string[]; errors: string[] }> {
+  const post = ('post' in postInput && postInput.post) ? postInput.post : (postInput as QuizPost);
   const imageUrl = post.renderedImageUrl || post.imageUrl;
   if (!imageUrl) {
     throw new Error("No image available to post. Please queue or upload an image first.");

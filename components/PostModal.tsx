@@ -686,19 +686,24 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
       const dataUrl = await generateCardDataUrl();
       const storageUrl = await uploadRenderedCard(post.userId, post.id, dataUrl);
       const postToPost = getUpdatedPost(storageUrl);
-      const queued = await queuePostForAutopost(post.userId, postToPost, storageUrl, undefined, allPosts);
+      const queuedRes = await queuePostForAutopost(post.userId, postToPost, storageUrl, undefined, allPosts);
+      const postToDispatch = queuedRes.post || postToPost;
       setPostNowStatus("Publishing to socials...");
 
       const config = getLocalSocialConfig();
-      const res = await dispatchPostDirectly(queued, config, post.userId);
+      const res = await dispatchPostDirectly(postToDispatch, config, post.userId);
       if (res.success) {
         setPostNowStatus(`✅ Posted to: ${res.platforms.join(', ')}!`);
-        onPostUpdated?.({ 
-          ...queued, 
+        const fullyPosted: QuizPost = { 
+          ...postToDispatch, 
           scheduleStatus: 'posted', 
           postedPlatforms: res.platforms, 
           postedAt: Date.now() 
-        });
+        };
+        onPostUpdated?.(fullyPosted);
+        if (post.userId) {
+          await updateUserPost(post.userId, fullyPosted);
+        }
       } else {
         setPostNowStatus(`⚠️ Failed: ${res.errors.join(' | ')}`);
       }
