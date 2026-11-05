@@ -1121,7 +1121,7 @@ const App: React.FC = () => {
                         <ChevronLeft size={16} /> Back to Articles List
                       </button>
 
-                      {selectedArticlePost.wpPostUrl && (
+                      {selectedArticlePost.wpStatus === 'publish' && selectedArticlePost.wpPostUrl && (
                         <a
                           href={selectedArticlePost.wpPostUrl}
                           target="_blank"
@@ -1130,6 +1130,25 @@ const App: React.FC = () => {
                         >
                           <ExternalLink size={13} /> View Live on quizandriddles.com
                         </a>
+                      )}
+
+                      {selectedArticlePost.wpStatus === 'future' && (
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold text-amber-300 bg-amber-500/10 border border-amber-500/20 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                            <Clock size={13} className="text-amber-400 shrink-0" />
+                            <span>Scheduled on WP (Hidden until date)</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handlePublishArticleToWp(selectedArticlePost, 'publish')}
+                            disabled={isPublishingWp || !articleHtmlDraft.trim()}
+                            className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md active:scale-95"
+                            title="Make article public and viewable immediately"
+                          >
+                            {isPublishingWp ? <Loader2 size={13} className="animate-spin" /> : <Globe size={13} />}
+                            Publish Live Now
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -1198,11 +1217,21 @@ const App: React.FC = () => {
                             <div className="flex items-center justify-between">
                               <span className="text-zinc-400 font-medium">Status:</span>
                               <span className={`font-bold px-2 py-0.5 rounded-md ${
-                                selectedArticlePost.wpPostUrl 
-                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                                selectedArticlePost.wpStatus === 'publish'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : selectedArticlePost.wpStatus === 'future'
+                                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                                  : selectedArticlePost.wpStatus === 'draft'
+                                  ? 'bg-zinc-700/50 text-zinc-300 border border-zinc-600'
                                   : (articleHtmlDraft ? 'bg-blue-500/20 text-blue-300' : 'bg-zinc-800 text-zinc-400')
                               }`}>
-                                {selectedArticlePost.wpPostUrl ? 'Published' : (articleHtmlDraft ? 'Draft Ready' : 'Not Written')}
+                                {selectedArticlePost.wpStatus === 'publish'
+                                  ? 'Live on Website'
+                                  : selectedArticlePost.wpStatus === 'future'
+                                  ? 'Scheduled on WP (Future)'
+                                  : selectedArticlePost.wpStatus === 'draft'
+                                  ? 'WordPress Draft'
+                                  : (articleHtmlDraft ? 'Draft Ready' : 'Not Written')}
                               </span>
                             </div>
                             <div className="pt-1">
@@ -1232,7 +1261,15 @@ const App: React.FC = () => {
                               className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all active:scale-95 shadow-md"
                             >
                               {isPublishingWp ? <Loader2 size={15} className="animate-spin" /> : <Globe size={15} />}
-                              <span>{isPublishingWp ? 'Uploading to WP...' : (selectedArticlePost.wpPostUrl ? 'Update on WordPress' : 'Publish to WordPress')}</span>
+                              <span>
+                                {isPublishingWp 
+                                  ? 'Publishing to WP...' 
+                                  : selectedArticlePost.wpStatus === 'publish' 
+                                  ? 'Update Live Article on WP' 
+                                  : selectedArticlePost.wpStatus === 'future'
+                                  ? '🚀 Publish Live on WordPress Now'
+                                  : (selectedArticlePost.wpPostUrl ? 'Publish Live to WordPress' : 'Publish to WordPress')}
+                              </span>
                             </button>
 
                             <button
@@ -1335,7 +1372,7 @@ const App: React.FC = () => {
                               <span className="text-[10px] font-black uppercase px-2 py-0.5 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-md">
                                 {post.category}
                               </span>
-                              {post.wpPostUrl ? (
+                              {post.wpStatus === 'publish' && post.wpPostUrl ? (
                                 <a
                                   href={post.wpPostUrl}
                                   target="_blank"
@@ -1345,6 +1382,14 @@ const App: React.FC = () => {
                                 >
                                   <CheckCircle2 size={10} /> Live on WP <ExternalLink size={9} />
                                 </a>
+                              ) : post.wpStatus === 'future' ? (
+                                <span className="text-[10px] font-bold text-amber-300 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md flex items-center gap-1">
+                                  <Clock size={10} /> Scheduled on WP
+                                </span>
+                              ) : post.wpStatus === 'draft' ? (
+                                <span className="text-[10px] font-bold text-zinc-300 bg-zinc-800 border border-zinc-700 px-2 py-0.5 rounded-md">
+                                  WP Draft
+                                </span>
                               ) : post.articleContent ? (
                                 <span className="text-[10px] font-bold text-blue-400 bg-blue-500/10 border border-blue-500/30 px-2 py-0.5 rounded-md">
                                   Draft Ready

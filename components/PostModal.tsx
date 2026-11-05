@@ -1133,7 +1133,7 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                       </span>
                     </button>
                   )}
-                  {post.wpPostUrl && (
+                  {post.wpPostUrl && post.wpStatus === 'publish' && (
                     <a
                       href={post.wpPostUrl}
                       target="_blank"
@@ -1145,6 +1145,15 @@ const PostModal: React.FC<PostModalProps> = ({ post, allPosts, onClose, onPostUp
                       <span>View on Web</span>
                       <ExternalLink size={11} className="opacity-70" />
                     </a>
+                  )}
+                  {post.wpPostUrl && post.wpStatus === 'future' && (
+                    <span
+                      className="py-2.5 sm:py-3 px-3.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shrink-0"
+                      title="Article is scheduled on WordPress for the queue date"
+                    >
+                      <Clock size={14} className="text-amber-400" />
+                      <span>WP Scheduled</span>
+                    </span>
                   )}
                 </div>
                 {postNowStatus && (

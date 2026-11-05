@@ -242,6 +242,12 @@ export async function publishToWordPress(
     payload.status = 'future';
     // WordPress REST API uses date_gmt (YYYY-MM-DDTHH:MM:SS) for UTC ISO timestamps
     payload.date_gmt = new Date(params.scheduledIso).toISOString().slice(0, 19);
+  } else if (!params.status || params.status === 'publish') {
+    payload.status = 'publish';
+    // Crucial: If the post was previously scheduled with a future date, updating status to 'publish'
+    // without resetting date_gmt causes WordPress core to force the status back to 'future'.
+    // Setting date_gmt to now ensures WordPress publishes the post immediately live!
+    payload.date_gmt = new Date().toISOString().slice(0, 19);
   }
 
   // If a post ID already exists, update the existing post instead of creating a duplicate
@@ -295,13 +301,17 @@ export async function updateWordPressPostStatus(
   const endpoint = `${site}/wp-json/wp/v2/posts/${wpPostId}`;
 
   try {
+    const payload: any = { status };
+    if (status === 'publish') {
+      payload.date_gmt = new Date().toISOString().slice(0, 19);
+    }
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: {
         'Authorization': getAuthHeader(config),
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify(payload),
     });
     return res.ok;
   } catch (err) {
