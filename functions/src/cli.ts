@@ -38,6 +38,12 @@ function buildCaption(post: any): string {
   else if (category === 'Would you rather') header = '💭 WOULD YOU RATHER?';
   else if (category) header = `🧠 ${category.toUpperCase()}`;
 
+  if (!post.isDirectImage && post.wpPostUrl && typeof post.wpPostUrl === 'string' && post.wpPostUrl.trim().length > 0) {
+    const rawUrl = post.wpPostUrl.trim();
+    const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    return `${header}\n\nComment first and check answer👉 ${url}`;
+  }
+
   if (category === 'Would you rather') {
     return `${header}\n\nWhich one are you choosing?`;
   }

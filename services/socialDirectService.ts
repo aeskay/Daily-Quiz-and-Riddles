@@ -151,10 +151,27 @@ export function getDefaultCategoryHook(category?: string): string {
 
 /**
  * Builds standard social caption:
- * Format: [Category Header] + [Teaser Hook]
+ * Format with article: [Category Header] \n\n Comment first and check answer👉 [URL]
+ * Format without article: [Category Header] \n\n [Teaser Hook]
  */
 export function buildSocialCaption(post: QuizPost): string {
   const header = getCategoryHeader(post.category);
+
+  // If a WordPress companion article URL exists, use the clean viral CTA format:
+  // e.g.:
+  // 🧩 RIDDLE
+  //
+  // Comment first and check answer👉 https://quizandriddles.com/?p=1728
+  if (
+    !post.isDirectImage &&
+    post.wpPostUrl &&
+    post.wpPostUrl.trim().length > 0
+  ) {
+    const rawUrl = post.wpPostUrl.trim();
+    const url = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    return `${header}\n\nComment first and check answer👉 ${url}`;
+  }
+
   let mainText = '';
 
   if (isWouldYouRather(post.category, post.visual_text)) {
@@ -166,21 +183,7 @@ export function buildSocialCaption(post: QuizPost): string {
     mainText = hook || getDefaultCategoryHook(post.category);
   }
 
-  let caption = `${header}\n\n${mainText}`;
-
-  // If a WordPress article is published or scheduled, add the teaser CTA link!
-  // STRICT: Never for direct image posts, and never if answer is missing
-  if (
-    !post.isDirectImage &&
-    post.wpPostUrl &&
-    post.wpPostUrl.startsWith('http') &&
-    post.answer &&
-    post.answer.trim().length > 0
-  ) {
-    caption += `\n\n👉 Full explanation & answer breakdown: ${post.wpPostUrl}`;
-  }
-
-  return caption;
+  return `${header}\n\n${mainText}`;
 }
 
 /**
